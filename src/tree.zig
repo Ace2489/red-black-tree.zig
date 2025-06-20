@@ -215,7 +215,7 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
                 }
                 if (parent_node.parent_idx == NULL_IDX) {
                     if (parent_node.colour != .Black) {
-                        std.debug.print("Very strange scenario here: Nodes{}\n\nBalancing node: {}\n", .{ nodes, parent_node });
+                        std.debug.print("Very strange scenario here: Nodes{any}\n\nBalancing node: {}\n", .{ nodes, parent_node });
                         unreachable;
                     }
                     return parent_idx;
