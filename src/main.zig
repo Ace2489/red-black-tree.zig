@@ -50,3 +50,49 @@ test "initCapacity" {
     try expect(tree.nodes.capacity >= cap);
     try expect(tree.nodes.items.len == 0);
 }
+
+test "ascending inputs inputs" {
+    const allocator = std.testing.allocator;
+    const inputs = [_]u64{ 0, 5, 10, 15, 20, 25, 30, 35, 40 };
+
+    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
+
+    tree.insert(.{ .key = inputs[0], .value = inputs[0] * 10 });
+
+    for (inputs[1..]) |i| {
+        tree.insert(.{ .key = i, .value = i * 10 });
+    }
+
+    try expect(true);
+}
+
+test "descending inputs" {
+    const allocator = std.testing.allocator;
+    const inputs = [_]u64{ 40, 35, 30, 25, 20, 15, 10, 5 };
+
+    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
+
+    tree.insert(.{ .key = inputs[0], .value = inputs[0] * 10 });
+
+    for (inputs[1..]) |i| {
+        tree.insert(.{ .key = i, .value = i * 10 });
+    }
+}
+
+test "tricky inputs" {
+    const allocator = std.testing.allocator;
+    const inputs = [_]u64{ 10, 20, 30, 15, 5, 22, 28, 12 };
+
+    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
+
+    tree.insert(.{ .key = inputs[0], .value = inputs[0] * 10 });
+
+    for (inputs[1..]) |i| {
+        tree.insert(.{ .key = i, .value = i * 10 });
+    }
+
+    std.debug.print("Keys: {}\nNodes: {}\n", .{ tree.keys, tree.nodes });
+}

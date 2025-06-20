@@ -52,13 +52,13 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
         values: Values,
 
         pub fn initCapacity(allocator: Allocator, capacity: usize) !Self {
-            const nodes = try Nodes.initCapacity(allocator, capacity);
+            var nodes = try Nodes.initCapacity(allocator, capacity);
             errdefer nodes.deinit(allocator);
 
-            const keys = try Keys.initCapacity(allocator, capacity);
+            var keys = try Keys.initCapacity(allocator, capacity);
             errdefer keys.deinit(allocator);
 
-            const values = try Values.initCapacity(allocator, capacity);
+            var values = try Values.initCapacity(allocator, capacity);
             errdefer values.deinit(allocator);
 
             const tree = Self{
@@ -75,6 +75,12 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             try self.nodes.ensureUnusedCapacity(allocator, count);
             try self.keys.ensureUnusedCapacity(allocator, count);
             try self.values.ensureUnusedCapacity(allocator, count);
+        }
+
+        pub fn deinit(self: *Self, allocator: Allocator) void {
+            self.nodes.deinit(allocator);
+            self.keys.deinit(allocator);
+            self.values.deinit(allocator);
         }
 
         pub fn insert(self: *Self, kv: KV) void {
@@ -95,7 +101,7 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
 
             //The key already exists
             if (new_root_idx == NULL_IDX) return;
-            std.debug.print("Got to the case outside the existing key case\n", .{});
+            self.root_idx = new_root_idx;
         }
 
         //TODO: Is there a way to restructure this so I still have the benefits of safety but am not calling the asserts multiple times
@@ -130,7 +136,8 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             const new_node = Node{ .key_idx = new_idx, .colour = .Red, .parent_idx = parent_idx };
             self.nodes.appendAssumeCapacity(new_node);
             branch_ptr.* = new_idx;
-            return balanceTree(new_node.parent_idx, self.nodes.items);
+            // std.debug.print("Balancing started for {}\n\n", .{self.nodes});
+            return balanceTree(self.nodes.items, new_node.parent_idx);
         }
 
         pub fn insertRoot(self: *Self, kv: KV) void {
@@ -154,53 +161,169 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             self.root_idx = root_idx;
         }
 
-        pub fn balanceTree(node_idx: u32, nodes: []Node) u32 {
-            assert(node_idx != NULL_IDX);
-            var node = &nodes[node_idx];
+        ///We always balance from the perspective of the node's parent, makes things easier to reason about
+        pub fn balanceTree(nodes: []Node, idx: u32) u32 {
+            var parent_idx: u32 = idx;
+            assert(parent_idx != NULL_IDX);
+            while (true) {
+                var parent_node = &nodes[parent_idx];
+                // std.debug.print("Balancing for {}\n,Tree: {any}\n", .{ parent_node, nodes });
+                const can_flip = blk: {
+                    if (parent_node.left_idx == NULL_IDX or parent_node.right_idx == NULL_IDX)
+                        break :blk false;
 
-            const can_flip = blk: {
-                if (node.left_idx == NULL_IDX or node.right_idx == NULL_IDX)
-                    break :blk false;
+                    const left = &nodes[parent_node.left_idx];
+                    const right = &nodes[parent_node.right_idx];
 
-                const left = &nodes[node.left_idx];
-                const right = &nodes[node.right_idx];
+                    break :blk left.colour == .Red and right.colour == .Red;
+                };
 
-                break :blk left.colour == .Red and right.colour == .Red;
-            };
-
-            if (can_flip) {
-                colourFlip(node, nodes, true);
-
-                if (node.parent_idx == NULL_IDX) {
-                    node.colour = .Black;
-                    return node_idx;
+                if (can_flip) {
+                    colourFlip(nodes, parent_node, true);
+                    if (parent_node.parent_idx == NULL_IDX) {
+                        parent_node.colour = .Black;
+                        return parent_idx;
+                    }
+                    parent_idx = parent_node.parent_idx;
+                    continue;
                 }
-                return balanceTree(node.parent_idx, nodes);
+
+                const hanging_right_link = blk: {
+                    if (parent_node.right_idx == NULL_IDX) break :blk false;
+
+                    const right = &nodes[parent_node.right_idx];
+
+                    break :blk right.colour == .Red;
+                };
+
+                if (hanging_right_link) {
+                    parent_idx = rotate_left(nodes, parent_node, true);
+                    continue;
+                }
+
+                const double_red_left_links = blk: {
+                    if (parent_node.left_idx == NULL_IDX) break :blk false;
+                    const left = &nodes[parent_node.left_idx];
+
+                    if (left.left_idx == NULL_IDX or left.colour != .Red) break :blk false;
+                    const left_left = &nodes[left.left_idx];
+
+                    break :blk left_left.colour == .Red;
+                };
+
+                if (double_red_left_links) {
+                    parent_idx = rotate_right(nodes, parent_node, true);
+                    continue;
+                }
+                if (parent_node.parent_idx == NULL_IDX) {
+                    if (parent_node.colour != .Black) {
+                        std.debug.print("Very strange scenario here: {}\n", .{parent_node});
+                        unreachable;
+                    }
+                    return parent_idx;
+                }
+                parent_idx = parent_node.parent_idx;
             }
-
-            if (node.parent_idx == NULL_IDX) return node_idx;
-
-            return balanceTree(node.parent_idx, nodes);
         }
 
-        pub fn colourFlip(node: *Node, nodes: []Node, safety_checks: bool) void {
+        pub fn colourFlip(nodes: []Node, node: *Node, safety_checks_for_insertion: bool) void {
             const left = &nodes[node.left_idx];
             const right = &nodes[node.right_idx];
 
             //Extra safety checks for colour flips during insertions
-            if (safety_checks) {
+            if (safety_checks_for_insertion) {
                 assert(right.colour == .Red and left.colour == .Red);
             }
 
-            left.*.colour = @enumFromInt(~@intFromEnum(left.colour));
+            left.*.colour = @enumFromInt(~@intFromEnum(left.colour)); //a nifty way to flip colours
             right.*.colour = @enumFromInt(~@intFromEnum(right.colour));
             node.*.colour = @enumFromInt(~@intFromEnum(node.colour));
         }
 
-        pub fn deinit(self: *Self, allocator: Allocator) void {
-            self.nodes.deinit(allocator);
-            self.keys.deinit(allocator);
-            self.values.deinit(allocator);
+        pub fn rotate_left(nodes: []Node, node: *Node, safety_checks_for_insertion: bool) u32 {
+            assert(node.right_idx != NULL_IDX);
+            if (safety_checks_for_insertion) {
+                const right = &nodes[node.right_idx];
+                assert(right.colour == .Red);
+            }
+            const node_idx = node.key_idx; //All the lists maintain a direct mapping between each other, allowing us to index one with the index of another
+            const right_child_idx = node.right_idx;
+            const right_child = &nodes[right_child_idx];
+
+            const node_colour = node.colour;
+            const right_colour = right_child.colour;
+
+            node.colour = right_colour;
+            right_child.colour = node_colour;
+
+            right_child.parent_idx = node.parent_idx;
+
+            if (node.parent_idx != NULL_IDX) {
+                const parent = &nodes[node.parent_idx];
+
+                //parent re-assignment
+                if (parent.right_idx == node_idx) {
+                    assert(parent.left_idx != node_idx);
+                    parent.right_idx = right_child_idx;
+                } else {
+                    // std.debug.print("Parent:{}\n, node:{}", .{ parent, node });
+                    assert(parent.left_idx == node_idx);
+                    parent.left_idx = right_child_idx;
+                }
+            }
+            node.parent_idx = right_child_idx;
+            node.right_idx = right_child.left_idx;
+            right_child.left_idx = node_idx;
+
+            //Newly assigned right child
+            if (node.right_idx != NULL_IDX) {
+                const new_right = &nodes[node.right_idx];
+                new_right.parent_idx = node_idx;
+            }
+
+            return right_child_idx; //the old right child is now the node's parent
+        }
+
+        pub fn rotate_right(nodes: []Node, node: *Node, safety_checks_for_insertion: bool) u32 {
+            assert(node.left_idx != NULL_IDX);
+
+            const node_idx = node.key_idx;
+            const left_child_idx = node.left_idx;
+            const left_child = &nodes[left_child_idx];
+
+            if (safety_checks_for_insertion) {
+                assert(left_child.colour == .Red);
+            }
+
+            const node_colour = node.colour;
+            const left_child_colour = left_child.colour;
+
+            node.colour = left_child_colour;
+            left_child.colour = node_colour;
+
+            left_child.parent_idx = node.parent_idx;
+            if (node.parent_idx != NULL_IDX) {
+                const parent = &nodes[node.parent_idx];
+
+                if (parent.left_idx == node_idx) {
+                    assert(parent.right_idx != node_idx);
+                    parent.left_idx = left_child_idx;
+                } else {
+                    assert(parent.right_idx == node_idx);
+                    parent.right_idx = left_child_idx;
+                }
+            }
+
+            node.parent_idx = left_child_idx;
+            node.left_idx = left_child.right_idx;
+            left_child.right_idx = node_idx;
+
+            //the newly assigned left index
+            if (node.left_idx != NULL_IDX) {
+                const new_left = &nodes[node.left_idx];
+                new_left.parent_idx = node_idx;
+            }
+            return left_child_idx;
         }
     };
 }
