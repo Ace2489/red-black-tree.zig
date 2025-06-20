@@ -136,7 +136,6 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             const new_node = Node{ .key_idx = new_idx, .colour = .Red, .parent_idx = parent_idx };
             self.nodes.appendAssumeCapacity(new_node);
             branch_ptr.* = new_idx;
-            // std.debug.print("Balancing started for {}\n\n", .{self.nodes});
             return balanceTree(self.nodes.items, new_node.parent_idx);
         }
 
@@ -167,7 +166,6 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             assert(parent_idx != NULL_IDX);
             while (true) {
                 var parent_node = &nodes[parent_idx];
-                // std.debug.print("Balancing for {}\n,Tree: {any}\n", .{ parent_node, nodes });
                 const can_flip = blk: {
                     if (parent_node.left_idx == NULL_IDX or parent_node.right_idx == NULL_IDX)
                         break :blk false;
@@ -217,7 +215,7 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
                 }
                 if (parent_node.parent_idx == NULL_IDX) {
                     if (parent_node.colour != .Black) {
-                        std.debug.print("Very strange scenario here: {}\n", .{parent_node});
+                        std.debug.print("Very strange scenario here: Nodes{}\n\nBalancing node: {}\n", .{ nodes, parent_node });
                         unreachable;
                     }
                     return parent_idx;
@@ -266,7 +264,6 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
                     assert(parent.left_idx != node_idx);
                     parent.right_idx = right_child_idx;
                 } else {
-                    // std.debug.print("Parent:{}\n, node:{}", .{ parent, node });
                     assert(parent.left_idx == node_idx);
                     parent.left_idx = right_child_idx;
                 }

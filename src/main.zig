@@ -93,6 +93,4 @@ test "tricky inputs" {
     for (inputs[1..]) |i| {
         tree.insert(.{ .key = i, .value = i * 10 });
     }
-
-    std.debug.print("Keys: {}\nNodes: {}\n", .{ tree.keys, tree.nodes });
 }
