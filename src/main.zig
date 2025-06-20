@@ -1,23 +1,59 @@
 const std = @import("std");
 const Tree = @import("tree.zig").Tree;
 const expect = std.testing.expect;
+const zbench = @import("zbench");
 
 pub fn main() !void {
     var debug = std.heap.DebugAllocator(.{}).init;
     const allocator = debug.allocator();
     defer _ = debug.deinit();
 
-    var tree = Tree(u64, []const u8, comp).empty;
-    defer tree.deinit(allocator);
+    var bench = zbench.Benchmark.init(allocator, .{});
+    defer bench.deinit();
 
-    try tree.reserve(allocator, 1);
-    tree.insert(.{ .key = 32, .value = "hello" });
-    tree.insert(.{ .key = 31, .value = "hal" });
-    tree.insert(.{ .key = 34, .value = "ho" });
+    try bench.add("Insertions array list", tree_list, .{ .iterations = 150 });
+    try bench.add("Insertions", rbTree, .{ .iterations = 150 });
+
+    try bench.run(std.io.getStdOut().writer());
+    // var tree = Tree(u64, []const u8, comp).empty;
+    // defer tree.deinit(allocator);
+
+    // try tree.reserve(allocator, 1);
+    // tree.insert(.{ .key = 32, .value = "hello" });
+    // tree.insert(.{ .key = 31, .value = "hal" });
+    // tree.insert(.{ .key = 34, .value = "ho" });
 }
 
 fn comp(a: u64, b: u64) std.math.Order {
     return std.math.order(a, b);
+}
+
+fn rbTree(allocator: std.mem.Allocator) void {
+    const len = 200000;
+    var tree = Tree(u64, u64, comp).initCapacity(allocator, len) catch unreachable;
+    defer tree.deinit(allocator);
+
+    for (0..len) |i| {
+        tree.insert(.{ .key = i, .value = i });
+    }
+}
+
+//The theoretical maximum that is achievable for this tree
+fn tree_list(allocator: std.mem.Allocator) void {
+    const len = 200000;
+
+    const NULL_IDX = 0xffffffff;
+    const Node = struct { right: u32, val: u64 };
+    var list = std.ArrayListUnmanaged(Node).initCapacity(allocator, len) catch unreachable;
+
+    list.appendAssumeCapacity(Node{ .right = NULL_IDX, .val = 0 });
+    var node_ptr = &list.items[0];
+
+    for (1..len) |i| {
+        list.appendAssumeCapacity(Node{ .right = NULL_IDX, .val = i });
+        node_ptr.*.right = @truncate(i);
+        node_ptr = &list.items[i];
+    }
 }
 
 test "emptylist" {
