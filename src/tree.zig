@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
+const tracy = @import("tracy");
 
 ///We use indexes instead of pointers for cache locality
 ///
@@ -84,6 +85,9 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
         }
 
         pub fn insert(self: *Self, kv: KV) void {
+            const zone = tracy.initZone(@src(), .{ .name = "insert" });
+            defer zone.deinit();
+
             //TODO: check for the max addressable length
             if (self.root_idx == NULL_IDX) {
                 return self.insertRoot(kv);
@@ -107,6 +111,9 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
         //TODO: Is there a way to restructure this so I still have the benefits of safety but am not calling the asserts multiple times
         ///Only meant to be called from inside the insert function, relies on pre-assertions already been made
         pub fn insertNode(self: *Self, node: *Node, kv: KV) u32 {
+            const zone = tracy.initZone(@src(), .{ .name = "insertNode" });
+            defer zone.deinit();
+
             const self_key = self.keys.items[node.key_idx];
 
             const comp = cmp_fn(kv.key, self_key);
@@ -126,10 +133,14 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
 
         ///Only meant to be called from inside the insert function, relies on pre-assertions being made already
         pub fn insertNewNode(self: *Self, parent_idx: u32, branch_ptr: *u32, kv: KV) u32 {
+            const zone = tracy.initZone(@src(), .{ .name = "insert New node" });
+
+            defer zone.deinit();
+
             const new_idx: u32 = @truncate(self.keys.items.len); //could be any of them, really - they're all  the same
             assert(new_idx < 0xFFFFFFFF); //maximum addressable element for a u32 index
             assert(parent_idx != NULL_IDX);
-
+            _ = 2;
             self.keys.appendAssumeCapacity(kv.key);
             self.values.appendAssumeCapacity(kv.value);
 
@@ -162,6 +173,8 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
 
         ///We always balance from the perspective of the node's parent, makes things easier to reason about
         pub fn balanceTree(nodes: []Node, idx: u32) u32 {
+            const zone = tracy.initZone(@src(), .{ .name = "Balance tree" });
+            defer zone.deinit();
             var parent_idx: u32 = idx;
             assert(parent_idx != NULL_IDX);
             while (true) {

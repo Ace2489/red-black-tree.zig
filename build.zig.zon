@@ -40,6 +40,10 @@
             .url = "git+https://github.com/hendriknielaender/zBench.git#c64bb43a3e32c5c62c02058ad7247e072301708d",
             .hash = "zbench-0.10.0-YTdc714iAQDO4lTHMnIljYHPZ5v_sNTsw75vAmO1pyT-",
         },
+        .tracy = .{
+            .url = "git+https://github.com/Ace2489/zig-tracy.git#0b68e07f25d5ccb7dd662b352a4477a71912474d",
+            .hash = "tracy-0.0.10-Dn49m2RUAACwsUFoUbP7B8wJFSRctSZAgd028h-MpuHX",
+        },
     },
     .paths = .{
         "build.zig",
