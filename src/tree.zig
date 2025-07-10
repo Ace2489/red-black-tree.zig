@@ -72,7 +72,7 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             return tree;
         }
 
-        pub fn reserve(self: *Self, allocator: Allocator, count: usize) !void {
+        pub fn reserveCapacity(self: *Self, allocator: Allocator, count: usize) !void {
             try self.nodes.ensureUnusedCapacity(allocator, count);
             try self.keys.ensureUnusedCapacity(allocator, count);
             try self.values.ensureUnusedCapacity(allocator, count);
@@ -84,7 +84,7 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             self.values.deinit(allocator);
         }
 
-        pub fn insert(self: *Self, kv: KV) void {
+        pub fn insertAssumeCapacity(self: *Self, kv: KV) void {
             const zone = tracy.initZone(@src(), .{ .name = "insert" });
             defer zone.deinit();
 
@@ -108,9 +108,30 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             self.root_idx = new_root_idx;
         }
 
+        pub fn get(self: *Self, key: K) ?V {
+            var node_idx: u32 = self.root_idx;
+
+            while (node_idx != NULL_IDX) {
+                const node = &self.nodes.items[node_idx]; //All lists have a one-to-one mapping to one another
+
+                const comp = cmp_fn(key, self.keys.items[node_idx]);
+
+                node_idx = switch (comp) {
+                    .lt => node.left_idx,
+                    .gt => node.right_idx,
+                    .eq => return self.values.items[node_idx],
+                };
+            }
+            return null;
+        }
         //TODO: Is there a way to restructure this so I still have the benefits of safety but am not calling the asserts multiple times
         ///Only meant to be called from inside the insert function, relies on pre-assertions already been made
         pub fn insertNode(self: *Self, node: *Node, kv: KV) u32 {
+            assert(self.keys.items.len <= self.keys.capacity - 1);
+            assert(self.nodes.items.len <= self.nodes.capacity - 1);
+            assert(self.values.items.len <= self.values.capacity - 1);
+            assert(self.nodes.items.len == self.keys.items.len and self.nodes.items.len == self.values.items.len);
+
             const zone = tracy.initZone(@src(), .{ .name = "insertNode" });
             defer zone.deinit();
 
@@ -133,14 +154,19 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
 
         ///Only meant to be called from inside the insert function, relies on pre-assertions being made already
         pub fn insertNewNode(self: *Self, parent_idx: u32, branch_ptr: *u32, kv: KV) u32 {
+            assert(self.keys.items.len <= self.keys.capacity - 1);
+            assert(self.nodes.items.len <= self.nodes.capacity - 1);
+            assert(self.values.items.len <= self.values.capacity - 1);
+            assert(self.nodes.items.len == self.keys.items.len and self.nodes.items.len == self.values.items.len);
+
             const zone = tracy.initZone(@src(), .{ .name = "insert New node" });
 
             defer zone.deinit();
 
-            const new_idx: u32 = @truncate(self.keys.items.len); //could be any of them, really - they're all  the same
+            const new_idx: u32 = @truncate(self.keys.items.len); //could be any of the lists, really - they're all  the same
             assert(new_idx < 0xFFFFFFFF); //maximum addressable element for a u32 index
             assert(parent_idx != NULL_IDX);
-            _ = 2;
+
             self.keys.appendAssumeCapacity(kv.key);
             self.values.appendAssumeCapacity(kv.value);
 
