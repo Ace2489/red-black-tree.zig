@@ -45,7 +45,7 @@ pub fn main() !void {
     // tree.insertAssumeCapacity(.{ .key = 31, .value = "ho" });
     // tree.insertAssumeCapacity(.{ .key = 33, .value = "ho" });
 
-    _ = tree.delete(20);
+    _ = tree.delete(35);
     std.debug.print("Tree structure: {}\nTree keys: {}\n", .{ tree.nodes, tree.keys });
     // const deleted = tree.delete(20);
 

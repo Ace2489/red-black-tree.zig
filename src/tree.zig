@@ -458,7 +458,7 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
                 return;
             }
             node.right_idx = deleteNode(nodes, keys, node.right_idx, key);
-            assert(node.right_idx != NULL_IDX);
+            if (node.right_idx == NULL_IDX) return;
             const right = &nodes[node.right_idx];
             right.parent_idx = node.key_idx;
         }
