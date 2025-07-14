@@ -20,12 +20,35 @@ pub fn main() !void {
     var tree = Tree(u64, []const u8, comp).empty;
     defer tree.deinit(allocator);
 
-    try tree.reserveCapacity(allocator, 1);
-    tree.insertAssumeCapacity(.{ .key = 32, .value = "hello" });
-    tree.insertAssumeCapacity(.{ .key = 31, .value = "hal" });
-    tree.insertAssumeCapacity(.{ .key = 34, .value = "ho" });
+    try tree.reserveCapacity(allocator, 18);
+    tree.insertAssumeCapacity(.{ .key = 20, .value = "hallo" });
+    tree.insertAssumeCapacity(.{ .key = 10, .value = "hal" });
+    tree.insertAssumeCapacity(.{ .key = 30, .value = "ho" });
+    tree.insertAssumeCapacity(.{ .key = 35, .value = "ho" });
 
-    _ = tree.get(32) orelse unreachable;
+    std.debug.print("Tree structure: {}\nTree keys: {}\n", .{ tree.nodes, tree.keys });
+
+    // tree.insertAssumeCapacity(.{ .key = 5, .value = "ho" });
+    // tree.insertAssumeCapacity(.{ .key = 15, .value = "hello" });
+    // tree.insertAssumeCapacity(.{ .key = 25, .value = "ho" });
+    // tree.insertAssumeCapacity(.{ .key = 35, .value = "ho" });
+
+    // tree.insertAssumeCapacity(.{ .key = 2, .value = "ho" });
+    // tree.insertAssumeCapacity(.{ .key = 7, .value = "ho" });
+    // tree.insertAssumeCapacity(.{ .key = 12, .value = "hal" });
+    // tree.insertAssumeCapacity(.{ .key = 17, .value = "hal" });
+    // tree.insertAssumeCapacity(.{ .key = 23, .value = "ho" });
+    // tree.insertAssumeCapacity(.{ .key = 27, .value = "ho" });
+    // tree.insertAssumeCapacity(.{ .key = 32, .value = "ho" });
+    // tree.insertAssumeCapacity(.{ .key = 37, .value = "ho" });
+
+    // tree.insertAssumeCapacity(.{ .key = 31, .value = "ho" });
+    // tree.insertAssumeCapacity(.{ .key = 33, .value = "ho" });
+
+    _ = tree.delete(20);
+    std.debug.print("Tree structure: {}\nTree keys: {}\n", .{ tree.nodes, tree.keys });
+    // const deleted = tree.delete(20);
+
 }
 
 fn comp(a: u64, b: u64) std.math.Order {
