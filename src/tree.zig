@@ -7,6 +7,7 @@ const tracy = @import("tracy");
 ///
 ///Represents a null pointer
 const NULL_IDX: u32 = 0xFFFFFFFF;
+const Colour = enum(u1) { Red, Black };
 
 pub fn NodeGen(comptime K: type, comptime V: type) type {
     return struct {
@@ -21,7 +22,7 @@ pub fn NodeGen(comptime K: type, comptime V: type) type {
         key_idx: u32 = NULL_IDX,
         parent_idx: u32,
 
-        colour: enum(u1) { Red, Black },
+        colour: Colour,
     };
 }
 
@@ -85,7 +86,7 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
 
         pub fn get(self: *Self, key: K) ?V {
             const node_idx = self.getIdx(key) orelse return null;
-            return self.values[node_idx];
+            return self.values.items[node_idx];
         }
 
         pub fn getIdx(self: *Self, key: K) ?u32 {
@@ -116,16 +117,28 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
 
             self.root_idx = new_root_idx;
 
-            const removed_node = self.nodes.swapRemove(removed_idx);
-            std.debug.print("\nRemoved: {}\n", .{removed_node});
+            // if (key == 35) {
+            //     std.debug.print("Nodes: {any}\n\n \n", .{self.nodes});
+            //     std.debug.print("keys: {}\n", .{self.keys});
+            //     std.process.exit(0);
+            // }
+
+            _ = self.nodes.swapRemove(removed_idx);
             const removed_key = self.keys.swapRemove(removed_idx);
             const removed_value = self.values.swapRemove(removed_idx);
 
             assert(removed_key == key);
 
-            if (removed_idx == self.nodes.items.len) return .{ .key = removed_key, .value = removed_value };
+            std.debug.print("Removed key {}\n", .{removed_key});
+
+            if (removed_idx == self.nodes.items.len) {
+                std.debug.print("Tree: {any}\n\n", .{self.nodes.items});
+                std.debug.print("keys: {any}\n\n", .{self.keys.items});
+                return .{ .key = removed_key, .value = removed_value };
+            }
 
             var swapped_node = &self.nodes.items[removed_idx];
+
             swapped_node.key_idx = removed_idx;
 
             //Re-linking parent and child nodes
@@ -147,7 +160,19 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
                     .eq => unreachable,
                 }
             }
-            // std.debug.print("\nNodes: {}\n\nKeys: {}\nRoot: {}\n", .{ self.nodes, self.keys, self.nodes.items[self.root_idx] });
+
+            if (self.root_idx == self.nodes.items.len) {
+                self.root_idx = removed_idx;
+            }
+
+            // if (key == 35) {
+            //     std.debug.print("Nodes: {any}\n\n \n", .{self.nodes});
+            //     std.debug.print("keys: {}\n", .{self.keys});
+            //     std.process.exit(0);
+            // }
+            std.debug.print("Tree: {any}\n\n", .{self.nodes.items});
+            std.debug.print("keys: {}\n\n", .{self.keys});
+
             return .{ .key = removed_key, .value = removed_value };
         }
 
@@ -317,11 +342,11 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
 
         ///This method assumes there is a node to delete
         ///
-        /// Make sure to verify that the node exists with a search first, before calling this
+        /// Make sure to verify that the node exists with a search first before calling this
         pub fn deleteNode(nodes: []Node, keys: []const Key, start_idx: u32, key: K) u32 {
             assert(start_idx != NULL_IDX);
             var cmp = cmp_fn(key, keys[start_idx]);
-            std.debug.print("\n\nDeleteNode called for {}\n", .{start_idx});
+            // std.debug.print("\n\nDeleteNode called for {} at {}\n", .{ key, keys[start_idx] });
 
             if (cmp == .lt) {
                 var node = &nodes[start_idx];
@@ -333,18 +358,16 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
                 }
                 const node_idx = fixUp(nodes, start_idx);
                 assert(node_idx != NULL_IDX);
-                const fixed_node = &nodes[node_idx];
-                if (fixed_node.parent_idx == NULL_IDX) {
-                    fixed_node.colour = .Black;
+                node = &nodes[node_idx];
+                if (node.parent_idx == NULL_IDX) {
+                    node.colour = .Black;
                 }
-                return fixed_node.key_idx;
+                return node.key_idx;
             }
 
-            std.debug.print("We fell through the check with the node carrying the key {}\n", .{keys[start_idx]});
             var node = &nodes[start_idx];
             const rotate_right = node.left_idx != NULL_IDX and (&nodes[node.left_idx]).colour == .Red;
             if (rotate_right) {
-                std.debug.print("Rotating right from deleteNode\n", .{});
                 const subtree_head = rotateRight(nodes, node, false);
                 assert(subtree_head != NULL_IDX);
                 node = &nodes[subtree_head];
@@ -353,28 +376,67 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
 
             const matched_to_leaf = cmp == .eq and node.right_idx == NULL_IDX;
             if (matched_to_leaf) {
-                std.debug.print("Deleting leaf: {}\n", .{keys[start_idx]});
                 return NULL_IDX;
             }
-            // std.process.exit(0);
 
             assert(node.right_idx != NULL_IDX);
 
             //This modifies the node being pointed to in-place
-            handleRightSubtree(nodes, keys, node.key_idx, key);
+            const move_right_red = blk: {
+                if (node.right_idx == NULL_IDX) break :blk true;
+                const right = &nodes[node.right_idx];
+                if (right.colour == .Red) break :blk false;
+
+                break :blk right.left_idx == NULL_IDX or (&nodes[right.left_idx]).colour == .Black;
+            };
+
+            if (move_right_red) {
+                colourFlip(nodes, node, false);
+                const left_left_red = blk: {
+                    if (node.left_idx == NULL_IDX) break :blk false;
+                    const left = &nodes[node.left_idx];
+                    break :blk left.left_idx != NULL_IDX and (&nodes[left.left_idx]).colour == .Red;
+                };
+
+                if (left_left_red) {
+                    const node_idx = rotateRight(nodes, node, false);
+                    assert(node_idx != NULL_IDX);
+                    node = &nodes[node_idx];
+                    colourFlip(nodes, node, false);
+                }
+            }
+
+            cmp = cmp_fn(key, keys[node.key_idx]);
+            if (cmp == .eq) {
+                node = replaceWithSuccessor(nodes, node);
+                const node_idx = fixUp(nodes, node.key_idx);
+                assert(node_idx != NULL_IDX);
+                node = &nodes[node_idx];
+
+                if (node.parent_idx == NULL_IDX) {
+                    node.colour = .Black;
+                }
+                return node_idx;
+            }
+            node.right_idx = deleteNode(nodes, keys, node.right_idx, key);
+
+            if (node.right_idx != NULL_IDX) {
+                const right = &nodes[node.right_idx];
+                right.parent_idx = node.key_idx;
+            }
 
             const node_idx = fixUp(nodes, node.key_idx);
             assert(node_idx != NULL_IDX);
-            const fixed_node = &nodes[node_idx];
-            if (fixed_node.parent_idx == NULL_IDX) {
+            node = &nodes[node_idx];
+            if (node.parent_idx == NULL_IDX) {
                 node.colour = .Black;
             }
-            return fixed_node.key_idx;
+
+            return node.key_idx;
         }
 
         pub inline fn deleteFromLeftSubtree(nodes: []Node, keys: []const Key, start_idx: u32, key: K) u32 {
             assert(start_idx != NULL_IDX);
-            std.debug.print("Delete from LT .start key: {}\n", .{keys[start_idx]});
             var node = &nodes[start_idx];
             assert(node.left_idx != NULL_IDX);
             const move_left_red = blk: {
@@ -386,7 +448,6 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             };
 
             if (move_left_red) {
-                std.debug.print("Moving left and to the red\n", .{});
                 const moved_idx = moveLeftRed(nodes, node.key_idx);
                 assert(moved_idx != NULL_IDX);
                 node = &nodes[moved_idx];
@@ -395,7 +456,6 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
         }
 
         pub inline fn moveLeftRed(nodes: []Node, node_idx: u32) u32 {
-            std.debug.print("Move left red idx {}\n", .{node_idx});
             assert(node_idx != NULL_IDX);
 
             var node = &nodes[node_idx];
@@ -421,50 +481,7 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             return node.key_idx;
         }
 
-        pub inline fn handleRightSubtree(nodes: []Node, keys: []const Key, start_idx: u32, key: K) void {
-            assert(start_idx != NULL_IDX);
-            std.debug.print("\n\nHandle Right subtree for {}\n", .{start_idx});
-            const move_right_red = blk: {
-                const node = &nodes[start_idx];
-                if (node.right_idx == NULL_IDX) break :blk true;
-                const right = &nodes[node.right_idx];
-                if (right.colour == .Red) break :blk false;
-
-                break :blk right.left_idx == NULL_IDX or (&nodes[right.left_idx]).colour == .Black;
-            };
-
-            var node = &nodes[start_idx];
-            if (move_right_red) {
-                std.debug.print("Moving right red for {}\n", .{start_idx});
-                colourFlip(nodes, node, false);
-                const left_left_red = blk: {
-                    if (node.left_idx == NULL_IDX) break :blk false;
-                    const left = &nodes[node.left_idx];
-                    break :blk left.left_idx != NULL_IDX and (&nodes[left.left_idx]).colour == .Red;
-                };
-
-                if (left_left_red) {
-                    std.debug.print("Left left red for {}\n", .{start_idx});
-                    const node_idx = rotateRight(nodes, node, false);
-                    assert(node_idx != NULL_IDX);
-                    node = &nodes[node_idx];
-                    colourFlip(nodes, node, false);
-                }
-            }
-
-            const cmp_result = cmp_fn(key, keys[node.key_idx]);
-            if (cmp_result == .eq) {
-                replaceWithSuccessor(nodes, node);
-                return;
-            }
-            node.right_idx = deleteNode(nodes, keys, node.right_idx, key);
-            if (node.right_idx == NULL_IDX) return;
-            const right = &nodes[node.right_idx];
-            right.parent_idx = node.key_idx;
-        }
-
-        pub inline fn replaceWithSuccessor(nodes: []Node, node: *Node) void {
-            std.debug.print("\n\nReplacing with successor", .{});
+        pub inline fn replaceWithSuccessor(nodes: []Node, node: *Node) *Node {
             assert(node.right_idx != NULL_IDX);
 
             var successor_idx: u32 = NULL_IDX;
@@ -493,17 +510,20 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
                 left.parent_idx = replacement_node.key_idx;
             }
 
-            node.* = replacement_node.*;
             if (node.parent_idx == NULL_IDX) {
-                return;
+                @memset(node[0..1], undefined); //Make sure to trigger an error if this is used elsewhere
+                return replacement_node;
             }
 
             const parent = &nodes[node.parent_idx];
 
             //Todo: Rigorously prove this on paper
-            assert(parent.right_idx == node.key_idx);
+            assert(parent.*.right_idx == node.key_idx);
             parent.right_idx = replacement_node.key_idx;
-            return;
+
+            @memset(node[0..1], undefined); //Make sure to trigger an error if this is used elsewhere
+
+            return replacement_node;
         }
 
         pub fn removeSuccessorNode(
@@ -511,7 +531,6 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             start_idx: u32,
             index_ptr: *u32, //An index which will be populated with the deleted node's index
         ) u32 {
-            std.debug.print("\n\nRemove successor node for {}\n", .{start_idx});
             var node = &nodes[start_idx];
             if (node.left_idx == NULL_IDX) {
                 index_ptr.* = node.key_idx;
@@ -542,22 +561,19 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
 
         ///Fixes up the sub-tree after a delete operation
         ///
-        /// We always balance/fix-up from the perspective of the parent.. It makes things easier to reason about
+        /// We always balance/fix-up from the perspective of the parent - It makes things easier to reason about
         pub fn fixUp(nodes: []Node, parent_idx: u32) u32 {
-            std.debug.print("Fix upping(lol) for idx {}\n\n", .{parent_idx});
             assert(parent_idx != NULL_IDX);
 
             {
                 const parent_node = &nodes[parent_idx];
+
                 const can_flip = blk: {
                     if (parent_node.left_idx == NULL_IDX or parent_node.right_idx == NULL_IDX) break :blk false;
                     break :blk (&nodes[parent_node.left_idx]).colour == .Red and (&nodes[parent_node.right_idx]).colour == .Red;
                 };
 
-                std.debug.print("Can flip {}\n", .{can_flip});
-
                 if (can_flip) {
-                    std.debug.print("Flipping for can_flip {}\n", .{can_flip});
                     colourFlip(nodes, parent_node, true);
                     return parent_idx; //After a colour flip, no more balancing needs to be done on the sub-tree
                 }
@@ -569,9 +585,7 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
                 break :blk (&nodes[parent_node.right_idx]).colour == .Red;
             };
 
-            std.debug.print("Hanging right link {}\n", .{hanging_right_link});
             if (hanging_right_link) {
-                std.debug.print("Resolving Hanging right link {}\n", .{hanging_right_link});
                 const new_parent_idx = rotateLeft(nodes, parent_node, true);
                 assert(new_parent_idx != NULL_IDX);
                 parent_node = &nodes[new_parent_idx];
@@ -584,10 +598,7 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
                 break :blk left.left_idx != NULL_IDX and (&nodes[left.left_idx]).colour == .Red;
             };
 
-            std.debug.print("double_left_red {}\n", .{double_left_red});
-
             if (double_left_red) {
-                std.debug.print("Resolving double left red {}\n", .{double_left_red});
                 const new_parent_idx = rotateRight(nodes, parent_node, true);
                 assert(new_parent_idx != NULL_IDX);
                 parent_node = &nodes[new_parent_idx];
@@ -612,7 +623,6 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
         }
 
         pub fn rotateLeft(nodes: []Node, node: *Node, safety_checks_for_insertion: bool) u32 {
-            std.debug.print("Rotating left for {}\n", .{node.key_idx});
             assert(node.right_idx != NULL_IDX);
             if (safety_checks_for_insertion) {
                 const right = &nodes[node.right_idx];
@@ -657,7 +667,6 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
 
         pub fn rotateRight(nodes: []Node, node: *Node, safety_checks_for_insertion: bool) u32 {
             assert(node.left_idx != NULL_IDX);
-            std.debug.print("Rotating right for {}\n", .{node.key_idx});
 
             const node_idx = node.key_idx;
             const left_child_idx = node.left_idx;

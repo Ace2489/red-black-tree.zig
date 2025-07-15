@@ -21,12 +21,14 @@ pub fn main() !void {
     defer tree.deinit(allocator);
 
     try tree.reserveCapacity(allocator, 18);
-    tree.insertAssumeCapacity(.{ .key = 20, .value = "hallo" });
-    tree.insertAssumeCapacity(.{ .key = 10, .value = "hal" });
-    tree.insertAssumeCapacity(.{ .key = 30, .value = "ho" });
-    tree.insertAssumeCapacity(.{ .key = 35, .value = "ho" });
+    for (1..8) |i| {
+        tree.insertAssumeCapacity(.{ .key = i * 5, .value = "haliday" });
+    }
 
-    std.debug.print("Tree structure: {}\nTree keys: {}\n", .{ tree.nodes, tree.keys });
+    tree.insertAssumeCapacity(.{ .key = 23, .value = "hallo" });
+    // tree.insertAssumeCapacity(.{ .key = 10, .value = "hal" });
+    // tree.insertAssumeCapacity(.{ .key = 30, .value = "ho" });
+    // tree.insertAssumeCapacity(.{ .key = 5, .value = "ho" });
 
     // tree.insertAssumeCapacity(.{ .key = 5, .value = "ho" });
     // tree.insertAssumeCapacity(.{ .key = 15, .value = "hello" });
@@ -45,7 +47,7 @@ pub fn main() !void {
     // tree.insertAssumeCapacity(.{ .key = 31, .value = "ho" });
     // tree.insertAssumeCapacity(.{ .key = 33, .value = "ho" });
 
-    _ = tree.delete(35);
+    _ = tree.delete(30);
     std.debug.print("Tree structure: {}\nTree keys: {}\n", .{ tree.nodes, tree.keys });
     // const deleted = tree.delete(20);
 
@@ -114,7 +116,7 @@ test "initCapacity" {
     try expect(tree.nodes.items.len == 0);
 }
 
-test "insertion: ascending inputs inputs" {
+test "insertion: ascending inputs" {
     const allocator = std.testing.allocator;
     const inputs = [_]u64{ 0, 5, 10, 15, 20, 25, 30, 35, 40 };
 
@@ -175,4 +177,91 @@ test "search" {
     for (inputs, 0..) |i, k| {
         try expect(tree.get(i) == k * 10);
     }
+}
+
+test "deletion: moveLeftRed on the right subtree twice with no successor subtree" {
+    const allocator = std.testing.allocator;
+
+    const inputs = [_]u64{ 5, 10, 15, 20, 25, 30, 35, 23 };
+
+    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
+
+    for (inputs, 0..) |i, k| {
+        tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 });
+    }
+}
+
+test "deletion: significantly long subtree" {
+    const allocator = std.testing.allocator;
+
+    const inputs = [_]u64{ 10, 30, 5, 5, 15, 25, 35, 2, 7, 12, 17, 23, 27, 32, 37, 31, 33 };
+
+    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
+
+    for (inputs, 0..) |i, k| {
+        tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 });
+    }
+}
+
+test "deletion: successive deletions to test right subtree successor replacements" {
+    const allocator = std.testing.allocator;
+    var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.milliTimestamp()));
+    const random = PRNG.random();
+
+    var inputs: [15]u64 = undefined;
+
+    for (0..inputs.len) |i| {
+        inputs[i] = 5 * i;
+    }
+
+    random.shuffle(u64, &inputs);
+    // _ = random;
+    // _ = &inputs;
+    std.debug.print("inputs for random right subtree deletion: {any}\n", .{inputs});
+    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
+
+    for (inputs, 0..) |i, k| {
+        tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 });
+    }
+
+    var root = tree.nodes.items[tree.root_idx];
+    while (root.right_idx != 0xFFFFFFFF) {
+        _ = tree.delete(tree.keys.items[root.right_idx]);
+        root = tree.nodes.items[tree.root_idx];
+    }
+    std.debug.print("Tree: {any}\nKeys:{any}\n\n", .{ tree.nodes.items, tree.keys.items });
+}
+
+test "deletion: (root):  successor replacements and rebalancing" {
+    const allocator = std.testing.allocator;
+
+    var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.milliTimestamp()));
+    const random = PRNG.random();
+
+    var inputs: [15]u64 = undefined;
+
+    for (0..inputs.len) |i| {
+        inputs[i] = 5 * i;
+    }
+
+    // random.shuffle(u64, inputs);
+    _ = random;
+    // _ = &inputs;
+    std.debug.print("inputs: {any}\n", .{inputs});
+    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
+
+    for (inputs, 0..) |i, k| {
+        tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 });
+    }
+
+    for (0..tree.nodes.items.len - 3) |_| {
+        // var root = &tree.nodes.items[tree.root_idx];
+        _ = tree.delete(tree.keys.items[tree.root_idx]);
+        // root = &tree.nodes.items[tree.root_idx];
+    }
+    std.debug.print("Tree: {any}\nKeys:{any}\n", .{ tree.nodes.items, tree.keys.items });
 }
