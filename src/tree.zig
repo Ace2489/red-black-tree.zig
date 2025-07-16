@@ -117,23 +117,13 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
 
             self.root_idx = new_root_idx;
 
-            // if (key == 35) {
-            //     std.debug.print("Nodes: {any}\n\n \n", .{self.nodes});
-            //     std.debug.print("keys: {}\n", .{self.keys});
-            //     std.process.exit(0);
-            // }
-
             _ = self.nodes.swapRemove(removed_idx);
             const removed_key = self.keys.swapRemove(removed_idx);
             const removed_value = self.values.swapRemove(removed_idx);
 
             assert(removed_key == key);
 
-            std.debug.print("Removed key {}\n", .{removed_key});
-
             if (removed_idx == self.nodes.items.len) {
-                std.debug.print("Tree: {any}\n\n", .{self.nodes.items});
-                std.debug.print("keys: {any}\n\n", .{self.keys.items});
                 return .{ .key = removed_key, .value = removed_value };
             }
 
@@ -164,14 +154,6 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             if (self.root_idx == self.nodes.items.len) {
                 self.root_idx = removed_idx;
             }
-
-            // if (key == 35) {
-            //     std.debug.print("Nodes: {any}\n\n \n", .{self.nodes});
-            //     std.debug.print("keys: {}\n", .{self.keys});
-            //     std.process.exit(0);
-            // }
-            std.debug.print("Tree: {any}\n\n", .{self.nodes.items});
-            std.debug.print("keys: {}\n\n", .{self.keys});
 
             return .{ .key = removed_key, .value = removed_value };
         }
@@ -351,12 +333,28 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             if (cmp == .lt) {
                 var node = &nodes[start_idx];
                 assert(node.left_idx != NULL_IDX);
-                node.left_idx = deleteFromLeftSubtree(nodes, keys, start_idx, key);
+
+                const move_left_red = blk: {
+                    const left = &nodes[node.left_idx];
+                    if (left.colour == .Red) break :blk false;
+
+                    //This will short-circuit and return true without trying the second one if the first condition is met. Neat!
+                    break :blk left.left_idx == NULL_IDX or (&nodes[left.left_idx]).colour == .Black;
+                };
+
+                if (move_left_red) {
+                    const moved_idx = moveLeftRed(nodes, node.key_idx);
+                    assert(moved_idx != NULL_IDX);
+                    node = &nodes[moved_idx];
+                }
+
+                node.left_idx = deleteNode(nodes, keys, node.left_idx, key);
+                //
                 if (node.left_idx != NULL_IDX) {
                     const left = &nodes[node.left_idx];
                     left.parent_idx = node.key_idx;
                 }
-                const node_idx = fixUp(nodes, start_idx);
+                const node_idx = fixUp(nodes, node.key_idx);
                 assert(node_idx != NULL_IDX);
                 node = &nodes[node_idx];
                 if (node.parent_idx == NULL_IDX) {
@@ -381,7 +379,6 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
 
             assert(node.right_idx != NULL_IDX);
 
-            //This modifies the node being pointed to in-place
             const move_right_red = blk: {
                 if (node.right_idx == NULL_IDX) break :blk true;
                 const right = &nodes[node.right_idx];
@@ -435,26 +432,6 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             return node.key_idx;
         }
 
-        pub inline fn deleteFromLeftSubtree(nodes: []Node, keys: []const Key, start_idx: u32, key: K) u32 {
-            assert(start_idx != NULL_IDX);
-            var node = &nodes[start_idx];
-            assert(node.left_idx != NULL_IDX);
-            const move_left_red = blk: {
-                const left = &nodes[node.left_idx];
-                if (left.colour == .Red) break :blk false;
-
-                //This will short-circuit and return true without trying the second one if the first condition is met. Neat!
-                break :blk left.left_idx == NULL_IDX or (&nodes[left.left_idx]).colour == .Black;
-            };
-
-            if (move_left_red) {
-                const moved_idx = moveLeftRed(nodes, node.key_idx);
-                assert(moved_idx != NULL_IDX);
-                node = &nodes[moved_idx];
-            }
-            return deleteNode(nodes, keys, node.left_idx, key);
-        }
-
         pub inline fn moveLeftRed(nodes: []Node, node_idx: u32) u32 {
             assert(node_idx != NULL_IDX);
 
@@ -468,10 +445,13 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             };
 
             if (right_left_red) {
-                const right_node = &nodes[node.right_idx];
+                var right_node = &nodes[node.right_idx];
                 const right_idx = rotateRight(nodes, right_node, false);
                 assert(right_idx != NULL_IDX);
+
                 node.right_idx = right_idx;
+                right_node = &nodes[node.right_idx];
+                right_node.parent_idx = node.key_idx;
 
                 const subtree_root = rotateLeft(nodes, node, false);
                 assert(subtree_root != NULL_IDX);
@@ -510,16 +490,18 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
                 left.parent_idx = replacement_node.key_idx;
             }
 
-            if (node.parent_idx == NULL_IDX) {
-                @memset(node[0..1], undefined); //Make sure to trigger an error if this is used elsewhere
-                return replacement_node;
+            if (node.parent_idx != NULL_IDX) {
+                assert(node.parent_idx != node.key_idx); //I'm in a lot of trouble if this happens
+                const parent = &nodes[node.parent_idx];
+
+                if (parent.right_idx == node.key_idx) {
+                    assert(parent.left_idx != node.key_idx);
+                    parent.right_idx = replacement_node.key_idx;
+                } else {
+                    assert(parent.left_idx == node.key_idx);
+                    parent.left_idx = replacement_node.key_idx;
+                }
             }
-
-            const parent = &nodes[node.parent_idx];
-
-            //Todo: Rigorously prove this on paper
-            assert(parent.*.right_idx == node.key_idx);
-            parent.right_idx = replacement_node.key_idx;
 
             @memset(node[0..1], undefined); //Make sure to trigger an error if this is used elsewhere
 

@@ -21,33 +21,10 @@ pub fn main() !void {
     defer tree.deinit(allocator);
 
     try tree.reserveCapacity(allocator, 18);
-    for (1..8) |i| {
-        tree.insertAssumeCapacity(.{ .key = i * 5, .value = "haliday" });
-    }
+    // for (1..8) |i| {
+    //     tree.insertAssumeCapacity(.{ .key = i * 5, .value = "haliday" });
+    // }
 
-    tree.insertAssumeCapacity(.{ .key = 23, .value = "hallo" });
-    // tree.insertAssumeCapacity(.{ .key = 10, .value = "hal" });
-    // tree.insertAssumeCapacity(.{ .key = 30, .value = "ho" });
-    // tree.insertAssumeCapacity(.{ .key = 5, .value = "ho" });
-
-    // tree.insertAssumeCapacity(.{ .key = 5, .value = "ho" });
-    // tree.insertAssumeCapacity(.{ .key = 15, .value = "hello" });
-    // tree.insertAssumeCapacity(.{ .key = 25, .value = "ho" });
-    // tree.insertAssumeCapacity(.{ .key = 35, .value = "ho" });
-
-    // tree.insertAssumeCapacity(.{ .key = 2, .value = "ho" });
-    // tree.insertAssumeCapacity(.{ .key = 7, .value = "ho" });
-    // tree.insertAssumeCapacity(.{ .key = 12, .value = "hal" });
-    // tree.insertAssumeCapacity(.{ .key = 17, .value = "hal" });
-    // tree.insertAssumeCapacity(.{ .key = 23, .value = "ho" });
-    // tree.insertAssumeCapacity(.{ .key = 27, .value = "ho" });
-    // tree.insertAssumeCapacity(.{ .key = 32, .value = "ho" });
-    // tree.insertAssumeCapacity(.{ .key = 37, .value = "ho" });
-
-    // tree.insertAssumeCapacity(.{ .key = 31, .value = "ho" });
-    // tree.insertAssumeCapacity(.{ .key = 33, .value = "ho" });
-
-    _ = tree.delete(30);
     std.debug.print("Tree structure: {}\nTree keys: {}\n", .{ tree.nodes, tree.keys });
     // const deleted = tree.delete(20);
 
@@ -190,12 +167,14 @@ test "deletion: moveLeftRed on the right subtree twice with no successor subtree
     for (inputs, 0..) |i, k| {
         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 });
     }
+
+    _ = tree.delete(30);
 }
 
 test "deletion: significantly long subtree" {
     const allocator = std.testing.allocator;
 
-    const inputs = [_]u64{ 10, 30, 5, 5, 15, 25, 35, 2, 7, 12, 17, 23, 27, 32, 37, 31, 33 };
+    const inputs = [_]u64{ 10, 30, 5, 15, 25, 35, 2, 7, 12, 17, 23, 27, 32, 37, 31, 33 };
 
     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
     defer tree.deinit(allocator);
@@ -203,11 +182,13 @@ test "deletion: significantly long subtree" {
     for (inputs, 0..) |i, k| {
         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 });
     }
+
+    _ = tree.delete(30);
 }
 
-test "deletion: successive deletions to test right subtree successor replacements" {
+test "deletion (right): successive deletions to test right subtree successor replacements" {
     const allocator = std.testing.allocator;
-    var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.milliTimestamp()));
+    var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
     const random = PRNG.random();
 
     var inputs: [15]u64 = undefined;
@@ -219,7 +200,7 @@ test "deletion: successive deletions to test right subtree successor replacement
     random.shuffle(u64, &inputs);
     // _ = random;
     // _ = &inputs;
-    std.debug.print("inputs for random right subtree deletion: {any}\n", .{inputs});
+    std.debug.print("inputs for random right deletion: {any}\n", .{inputs});
     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
     defer tree.deinit(allocator);
 
@@ -227,18 +208,17 @@ test "deletion: successive deletions to test right subtree successor replacement
         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 });
     }
 
-    var root = tree.nodes.items[tree.root_idx];
+    var root = &tree.nodes.items[tree.root_idx];
     while (root.right_idx != 0xFFFFFFFF) {
         _ = tree.delete(tree.keys.items[root.right_idx]);
-        root = tree.nodes.items[tree.root_idx];
+        root = &tree.nodes.items[tree.root_idx];
     }
-    std.debug.print("Tree: {any}\nKeys:{any}\n\n", .{ tree.nodes.items, tree.keys.items });
 }
 
 test "deletion: (root):  successor replacements and rebalancing" {
     const allocator = std.testing.allocator;
 
-    var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.milliTimestamp()));
+    var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
     const random = PRNG.random();
 
     var inputs: [15]u64 = undefined;
@@ -247,10 +227,10 @@ test "deletion: (root):  successor replacements and rebalancing" {
         inputs[i] = 5 * i;
     }
 
-    // random.shuffle(u64, inputs);
-    _ = random;
+    random.shuffle(u64, &inputs);
+    // _ = random;
     // _ = &inputs;
-    std.debug.print("inputs: {any}\n", .{inputs});
+    std.debug.print("inputs for random root deletion: {any}\n", .{inputs});
     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
     defer tree.deinit(allocator);
 
@@ -259,9 +239,39 @@ test "deletion: (root):  successor replacements and rebalancing" {
     }
 
     for (0..tree.nodes.items.len - 3) |_| {
-        // var root = &tree.nodes.items[tree.root_idx];
         _ = tree.delete(tree.keys.items[tree.root_idx]);
-        // root = &tree.nodes.items[tree.root_idx];
     }
-    std.debug.print("Tree: {any}\nKeys:{any}\n", .{ tree.nodes.items, tree.keys.items });
+}
+
+test "deletion (left): successor replacements and rebalancing" {
+    const allocator = std.testing.allocator;
+
+    var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
+    const random = PRNG.random();
+
+    var inputs: [15]u64 = undefined;
+
+    for (0..inputs.len) |i| {
+        inputs[i] = 5 * i;
+    }
+
+    random.shuffle(u64, &inputs);
+    _ = &inputs;
+    // _ = random;
+    std.debug.print("inputs for random left deletion: {any}\n", .{inputs});
+    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
+
+    for (inputs, 0..) |i, k| {
+        tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 });
+    }
+
+    var root = &tree.nodes.items[tree.root_idx];
+    while (root.left_idx != 0xFFFFFFFF) {
+        _ = tree.delete(tree.keys.items[root.left_idx]);
+
+        root = &tree.nodes.items[tree.root_idx];
+    }
+
+    tree.insertAssumeCapacity(.{ .key = 45, .value = 10 });
 }
