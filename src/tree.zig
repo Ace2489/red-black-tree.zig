@@ -7,6 +7,7 @@ const tracy = @import("tracy");
 ///
 ///Represents a null pointer
 const NULL_IDX: u32 = 0xFFFFFFFF;
+const MAX_IDX: u32 = 0xFFFFFFFF - 1;
 const Colour = enum(u1) { Red, Black };
 
 pub fn NodeGen(comptime K: type, comptime V: type) type {
@@ -26,7 +27,13 @@ pub fn NodeGen(comptime K: type, comptime V: type) type {
     };
 }
 
-pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key: K) std.math.Order) type {
+pub fn Tree(
+    comptime K: type,
+    comptime V: type,
+    /// A comparison function that returns the ordering(equal, less than, or greater than) between two keys.
+    /// Take note of the parameter order to prevent inverted trees
+    compare_fn: fn (key: K, self_key: K) std.math.Order,
+) type {
     return struct {
         pub const Key = K;
         pub const Value = V;
@@ -158,8 +165,7 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             return .{ .key = removed_key, .value = removed_value };
         }
 
-        pub fn insertAssumeCapacity(self: *Self, kv: KV) void {
-            errdefer comptime unreachable;
+        pub fn insertAssumeCapacity(self: *Self, kv: KV) error{FullTree}!void {
             const zone = tracy.initZone(@src(), .{ .name = "insert" });
             defer zone.deinit();
 
@@ -175,7 +181,9 @@ pub fn Tree(comptime K: type, comptime V: type, compare_fn: fn (key: K, self_key
             assert(self.values.items.len <= self.values.capacity - 1);
             assert(self.nodes.items.len == self.keys.items.len and self.nodes.items.len == self.values.items.len);
 
-            if (self.nodes.items.len == 0xFFFFFFFF - 1) return;
+            if (self.nodes.items.len == MAX_IDX) return error.FullTree;
+
+            errdefer comptime unreachable;
             const new_root_idx = self.insertNode(root, kv);
 
             //The key already exists
