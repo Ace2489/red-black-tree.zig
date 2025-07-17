@@ -263,6 +263,50 @@ pub fn Tree(
             self.root_idx = root_idx;
         }
 
+        pub fn range(self: *Self, min: K, max: K, out_buffer: []K) u32 {
+            if (self.root_idx == NULL_IDX) return 0;
+            assert(self.nodes.items.len < MAX_IDX);
+
+            const root = &self.nodes.items[self.root_idx];
+            const count = rangeNodes(self.nodes.items, self.keys.items, root, min, max, out_buffer, 0);
+            assert(count <= out_buffer.len);
+            return count;
+        }
+
+        pub fn rangeNodes(nodes: []Node, keys: []const Key, start_node: *Node, min: K, max: K, out_buffer: []K, collected_elements: u32) u32 {
+            if (collected_elements == out_buffer.len) return collected_elements;
+            assert(collected_elements < out_buffer.len);
+
+            var idx = collected_elements;
+            const min_comparison = cmp_fn(min, keys[start_node.key_idx]);
+
+            if (min_comparison == .lt) { // min < current_key
+                const left_idx = start_node.left_idx;
+                if (left_idx != NULL_IDX) {
+                    const left = &nodes[start_node.left_idx];
+                    idx = rangeNodes(nodes, keys, left, min, max, out_buffer, idx);
+                    if (idx == out_buffer.len) return idx;
+                }
+            }
+
+            const max_comparison = cmp_fn(max, keys[start_node.key_idx]);
+
+            if (min_comparison != .gt and max_comparison != .lt) { // min <= current_key and max >= current_key
+                out_buffer[idx] = keys[start_node.key_idx];
+                idx += 1;
+                if (idx == out_buffer.len) return idx; // Check after adding current node
+            }
+
+            if (max_comparison == .gt) { //max > current_key
+                const right_idx = start_node.right_idx;
+                if (right_idx != NULL_IDX) {
+                    const right = &nodes[right_idx];
+                    idx = rangeNodes(nodes, keys, right, min, max, out_buffer, idx);
+                }
+            }
+
+            return idx;
+        }
         ///We always balance from the perspective of the node's parent, makes things easier to reason about
         pub fn balanceTree(nodes: []Node, idx: u32) u32 {
             const zone = tracy.initZone(@src(), .{ .name = "Balance tree" });
