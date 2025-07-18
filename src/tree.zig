@@ -307,6 +307,13 @@ pub fn Tree(
 
             return idx;
         }
+
+        pub fn update(self: *Self, kv: KV) error{EntryNotFound}!KV {
+            const val_idx = self.getIdx(kv.key) orelse return error.EntryNotFound;
+
+            self.values.items[val_idx] = kv.value;
+            return .{ .key = kv.key, .value = kv.value };
+        }
         ///We always balance from the perspective of the node's parent, makes things easier to reason about
         pub fn balanceTree(nodes: []Node, idx: u32) u32 {
             const zone = tracy.initZone(@src(), .{ .name = "Balance tree" });

@@ -28,12 +28,6 @@ pub fn main() !void {
 
     std.debug.print("Tree structure: {}\nTree keys: {}\n", .{ tree.nodes, tree.keys });
     // const deleted = tree.delete(20);
-    //
-    var buf: [8]u64 = undefined;
-    @memset(buf[0..], 0);
-    const written = tree.filter(15, 30, buf[0..]);
-
-    std.debug.print("Filtered: {any}\n", .{buf[0..written]});
 }
 
 fn comp(a: u64, b: u64) std.math.Order {
@@ -311,7 +305,8 @@ test "deletion (left): successor replacements and rebalancing" {
 //         switch (start_direction) {
 //             0 => {
 //                 std.debug.print("going left\n", .{});
-//                 if (root.left_idx != ) {
+//                 if (root.left_idx != NULL_IDX) {
+//                     while(root.key_idx )
 //                     var node = &tree.nodes.items[root.left_idx];
 //                 }
 //             },
