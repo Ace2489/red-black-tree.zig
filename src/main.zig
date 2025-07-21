@@ -28,6 +28,7 @@ pub fn main() !void {
 
     std.debug.print("Tree structure: {}\nTree keys: {}\n", .{ tree.nodes, tree.keys });
     // const deleted = tree.delete(20);
+    std.debug.print("Alignment:{}\nSize:{}\n", .{ @alignOf(Tree(u64, []const u8, comp).Node), @sizeOf(Tree(u64, []const u8, comp).Node) });
 }
 
 fn comp(a: u64, b: u64) std.math.Order {
@@ -138,6 +139,8 @@ test "insertion: tricky inputs" {
     // std.debug.print("Ouptut: {}\n{}", .{ tree.nodes, tree.keys });
 }
 
+test "insertion: random inputs" {}
+
 test "search" {
     const allocator = std.testing.allocator;
 
@@ -242,7 +245,7 @@ test "deletion: (root):  successor replacements and rebalancing" {
     }
 }
 
-test "deletion (left): successor replacements and rebalancing" {
+test "deletion (left): successor deletions to test and rebalancing" {
     const allocator = std.testing.allocator;
 
     var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));

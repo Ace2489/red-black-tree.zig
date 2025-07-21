@@ -39,7 +39,7 @@ pub fn Tree(
         pub const Value = V;
         pub const KV = struct { key: K, value: V };
 
-        const Node = NodeGen(K, V);
+        pub const Node = NodeGen(K, V);
         const Keys = std.ArrayListUnmanaged(K);
         const Values = std.ArrayListUnmanaged(V);
         const Nodes = std.ArrayListUnmanaged(Node);
@@ -118,11 +118,7 @@ pub fn Tree(
 
             assert(self.root_idx != NULL_IDX);
 
-            const new_root_idx = deleteNode(self.nodes.items, self.keys.items, self.root_idx, key);
-
-            if (self.root_idx == NULL_IDX) return null; //We deleted the only node in tree
-
-            self.root_idx = new_root_idx;
+            self.root_idx = deleteNode(self.nodes.items, self.keys.items, self.root_idx, key);
 
             _ = self.nodes.swapRemove(removed_idx);
             const removed_key = self.keys.swapRemove(removed_idx);
@@ -130,7 +126,7 @@ pub fn Tree(
 
             assert(removed_key == key);
 
-            if (removed_idx == self.nodes.items.len) {
+            if (removed_idx == self.nodes.items.len) { //The removed index was the last in the list, there's no need to re-arrange the elements
                 return .{ .key = removed_key, .value = removed_value };
             }
 
@@ -142,6 +138,7 @@ pub fn Tree(
 
             if (swapped_node.left_idx != NULL_IDX) {
                 var left = &self.nodes.items[swapped_node.left_idx];
+
                 left.parent_idx = removed_idx;
             }
             if (swapped_node.right_idx != NULL_IDX) {
@@ -162,6 +159,7 @@ pub fn Tree(
                 self.root_idx = removed_idx;
             }
 
+            assert(self.root_idx != NULL_IDX);
             return .{ .key = removed_key, .value = removed_value };
         }
 
