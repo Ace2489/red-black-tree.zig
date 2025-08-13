@@ -174,12 +174,13 @@ pub fn Tree(
 
         ///We always balance from the perspective of the node's parent, makes things easier to reason about
         pub fn balanceTree(nodes: []Node, colours: *Colours, idx: u32) u32 {
-            const zone = tracy.initZone(@src(), .{ .name = "Balance tree" });
-            defer zone.deinit();
+            // const zone = tracy.initZone(@src(), .{ .name = "Balance tree" });
+            // defer zone.deinit();
             var parent_idx: u32 = idx;
             assert(parent_idx != NULL_IDX);
             while (true) {
                 const parent_node = &nodes[parent_idx];
+
                 const can_flip = blk: {
                     if (parent_node.left_idx == NULL_IDX or parent_node.right_idx == NULL_IDX)
                         break :blk false;
@@ -205,7 +206,7 @@ pub fn Tree(
                 };
 
                 if (hanging_right_link) {
-                    parent_idx = rotateLeft(nodes, parent_node, true);
+                    parent_idx = rotateLeft(nodes, colours, parent_node, true);
                     continue;
                 }
 
@@ -216,11 +217,11 @@ pub fn Tree(
 
                     const left = &nodes[parent_node.left_idx];
 
-                    break :blk (left.left_idx == NULL_IDX or !isRed(colours, left.left_idx));
+                    break :blk (left.left_idx != NULL_IDX and isRed(colours, left.left_idx));
                 };
 
                 if (double_red_left_links) {
-                    parent_idx = rotateRight(nodes, parent_node, true);
+                    parent_idx = rotateRight(nodes, colours, parent_node, true);
                     continue;
                 }
                 if (parent_node.parent_idx == NULL_IDX) { //This is the root of the tree
@@ -763,136 +764,136 @@ test "isRed" {
     try std.testing.expect(T.isRed(&colours, 0) == true);
 }
 
-test "rotateLeft with parent and varying right child cases " {
-    const allocator = std.testing.allocator;
-    const isRed = T.isRed;
+// test ".." {
+//     const allocator = std.testing.allocator;
+//     const isRed = T.isRed;
 
-    var nodes = try T.Nodes.initCapacity(allocator, 5);
-    var colours = try T.Colours.initFull(allocator, 5); //Sets all nodes to black;
-    defer nodes.deinit(allocator);
-    defer colours.deinit(allocator);
+//     var nodes = try T.Nodes.initCapacity(allocator, 5);
+//     var colours = try T.Colours.initFull(allocator, 5); //Sets all nodes to black;
+//     defer nodes.deinit(allocator);
+//     defer colours.deinit(allocator);
 
-    {
-        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = NULL_IDX, .parent_idx = NULL_IDX };
-        const subtree_root = Node{ .idx = 1, .left_idx = 2, .right_idx = 3, .parent_idx = root.idx }; //The node to be rotated
-        const subtree_left = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = subtree_root.idx };
-        const subtree_right = Node{ .idx = 3, .left_idx = 4, .right_idx = NULL_IDX, .parent_idx = subtree_root.idx };
-        const subtree_right_left = Node{ .idx = 4, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = subtree_right.idx };
+//     {
+//         const root = Node{ .idx = 0, .left_idx = 1, .right_idx = NULL_IDX, .parent_idx = NULL_IDX };
+//         const subtree_root = Node{ .idx = 1, .left_idx = 2, .right_idx = 3, .parent_idx = root.idx }; //The node to be rotated
+//         const subtree_left = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = subtree_root.idx };
+//         const subtree_right = Node{ .idx = 3, .left_idx = 4, .right_idx = NULL_IDX, .parent_idx = subtree_root.idx };
+//         const subtree_right_left = Node{ .idx = 4, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = subtree_right.idx };
 
-        nodes.appendSliceAssumeCapacity(([_]Node{ root, subtree_root, subtree_left, subtree_right, subtree_right_left })[0..]);
-        try expect(isRed(&colours, root.idx) == false); //Just in case someone flips the logic for which bit is red or black
+//         nodes.appendSliceAssumeCapacity(([_]Node{ root, subtree_root, subtree_left, subtree_right, subtree_right_left })[0..]);
+//         try expect(isRed(&colours, root.idx) == false); //Just in case someone flips the logic for which bit is red or black
 
-        colours.setValue(subtree_right.idx, Colour.Red);
+//         colours.setValue(subtree_right.idx, Colour.Red);
 
-        const new_subtree_root = T.rotateLeft(nodes.items, &colours, &nodes.items[subtree_root.idx], true);
-        try expect(new_subtree_root == subtree_right.idx);
+//         const new_subtree_root = T.rotateLeft(nodes.items, &colours, &nodes.items[subtree_root.idx], true);
+//         try expect(new_subtree_root == subtree_right.idx);
 
-        try expect(nodes.items[root.idx].parent_idx == NULL_IDX);
-        try expect(nodes.items[root.idx].left_idx == subtree_right.idx);
-        try expect(nodes.items[root.idx].right_idx == NULL_IDX);
-        try expect(isRed(&colours, root.idx) == false);
+//         try expect(nodes.items[root.idx].parent_idx == NULL_IDX);
+//         try expect(nodes.items[root.idx].left_idx == subtree_right.idx);
+//         try expect(nodes.items[root.idx].right_idx == NULL_IDX);
+//         try expect(isRed(&colours, root.idx) == false);
 
-        try expect(nodes.items[subtree_right.idx].parent_idx == root.idx);
-        try expect(nodes.items[subtree_right.idx].left_idx == subtree_root.idx);
-        try expect(nodes.items[subtree_right.idx].right_idx == NULL_IDX);
-        try expect(isRed(&colours, subtree_right.idx) == false);
+//         try expect(nodes.items[subtree_right.idx].parent_idx == root.idx);
+//         try expect(nodes.items[subtree_right.idx].left_idx == subtree_root.idx);
+//         try expect(nodes.items[subtree_right.idx].right_idx == NULL_IDX);
+//         try expect(isRed(&colours, subtree_right.idx) == false);
 
-        try expect(nodes.items[subtree_root.idx].parent_idx == subtree_right.idx);
-        try expect(nodes.items[subtree_root.idx].left_idx == subtree_left.idx);
-        try expect(nodes.items[subtree_root.idx].right_idx == subtree_right_left.idx);
-        try expect(isRed(&colours, subtree_root.idx) == true);
+//         try expect(nodes.items[subtree_root.idx].parent_idx == subtree_right.idx);
+//         try expect(nodes.items[subtree_root.idx].left_idx == subtree_left.idx);
+//         try expect(nodes.items[subtree_root.idx].right_idx == subtree_right_left.idx);
+//         try expect(isRed(&colours, subtree_root.idx) == true);
 
-        try expect(nodes.items[subtree_left.idx].parent_idx == subtree_root.idx);
-        try expect(nodes.items[subtree_left.idx].left_idx == NULL_IDX);
-        try expect(nodes.items[subtree_left.idx].right_idx == NULL_IDX);
-        try expect(isRed(&colours, subtree_left.idx) == false);
+//         try expect(nodes.items[subtree_left.idx].parent_idx == subtree_root.idx);
+//         try expect(nodes.items[subtree_left.idx].left_idx == NULL_IDX);
+//         try expect(nodes.items[subtree_left.idx].right_idx == NULL_IDX);
+//         try expect(isRed(&colours, subtree_left.idx) == false);
 
-        try expect(nodes.items[subtree_right_left.idx].parent_idx == subtree_root.idx);
-        try expect(nodes.items[subtree_right_left.idx].left_idx == NULL_IDX);
-        try expect(nodes.items[subtree_right_left.idx].right_idx == NULL_IDX);
-        try expect(isRed(&colours, subtree_right_left.idx) == false);
-    }
+//         try expect(nodes.items[subtree_right_left.idx].parent_idx == subtree_root.idx);
+//         try expect(nodes.items[subtree_right_left.idx].left_idx == NULL_IDX);
+//         try expect(nodes.items[subtree_right_left.idx].right_idx == NULL_IDX);
+//         try expect(isRed(&colours, subtree_right_left.idx) == false);
+//     }
 
-    {
-        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = NULL_IDX, .parent_idx = NULL_IDX };
-        const subtree_root = Node{ .idx = 1, .left_idx = 2, .right_idx = 3, .parent_idx = root.idx }; //The node to be rotated
-        const subtree_left = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = subtree_root.idx };
-        const subtree_right = Node{ .idx = 3, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = subtree_root.idx };
+//     {
+//         const root = Node{ .idx = 0, .left_idx = 1, .right_idx = NULL_IDX, .parent_idx = NULL_IDX };
+//         const subtree_root = Node{ .idx = 1, .left_idx = 2, .right_idx = 3, .parent_idx = root.idx }; //The node to be rotated
+//         const subtree_left = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = subtree_root.idx };
+//         const subtree_right = Node{ .idx = 3, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = subtree_root.idx };
 
-        nodes.clearRetainingCapacity();
-        colours.setAll();
+//         nodes.clearRetainingCapacity();
+//         colours.setAll();
 
-        nodes.appendSliceAssumeCapacity(([_]Node{ root, subtree_root, subtree_left, subtree_right })[0..]);
-        colours.setValue(subtree_right.idx, Colour.Red);
+//         nodes.appendSliceAssumeCapacity(([_]Node{ root, subtree_root, subtree_left, subtree_right })[0..]);
+//         colours.setValue(subtree_right.idx, Colour.Red);
 
-        const new_subtree_root = T.rotateLeft(nodes.items, &colours, &nodes.items[subtree_root.idx], true);
-        try expect(new_subtree_root == subtree_right.idx);
+//         const new_subtree_root = T.rotateLeft(nodes.items, &colours, &nodes.items[subtree_root.idx], true);
+//         try expect(new_subtree_root == subtree_right.idx);
 
-        try expect(nodes.items[subtree_root.idx].right_idx == NULL_IDX);
-        try expect(isRed(&colours, subtree_root.idx) == true);
-    }
-}
+//         try expect(nodes.items[subtree_root.idx].right_idx == NULL_IDX);
+//         try expect(isRed(&colours, subtree_root.idx) == true);
+//     }
+// }
 
-test "rotateLeft with no parent and fixed right_child cases" {
-    const allocator = std.testing.allocator;
-    const isRed = T.isRed;
+// test "rotateLeft with no parent and fixed left_child cases" {
+//     const allocator = std.testing.allocator;
+//     const isRed = T.isRed;
 
-    var nodes = try T.Nodes.initCapacity(allocator, 5);
-    var colours = try T.Colours.initFull(allocator, 5);
-    defer nodes.deinit(allocator);
-    defer colours.deinit(allocator);
-    {
-        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = 2, .parent_idx = NULL_IDX };
-        const root_left = Node{ .idx = 1, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root.idx };
-        const root_right = Node{ .idx = 2, .left_idx = 3, .right_idx = NULL_IDX, .parent_idx = root.idx };
-        const root_right_left = Node{ .idx = 3, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root_right.idx };
+//     var nodes = try T.Nodes.initCapacity(allocator, 5);
+//     var colours = try T.Colours.initFull(allocator, 5);
+//     defer nodes.deinit(allocator);
+//     defer colours.deinit(allocator);
+//     {
+//         const root = Node{ .idx = 0, .left_idx = 1, .right_idx = 2, .parent_idx = NULL_IDX };
+//         const root_left = Node{ .idx = 1, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root.idx };
+//         const root_right = Node{ .idx = 2, .left_idx = 3, .right_idx = NULL_IDX, .parent_idx = root.idx };
+//         const root_right_left = Node{ .idx = 3, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root_right.idx };
 
-        colours.setValue(root.right_idx, Colour.Red);
-        nodes.appendSliceAssumeCapacity(([_]Node{ root, root_left, root_right, root_right_left })[0..]);
-        const new_root_idx = T.rotateLeft(nodes.items, &colours, &nodes.items[root.idx], true);
+//         colours.setValue(root.right_idx, Colour.Red);
+//         nodes.appendSliceAssumeCapacity(([_]Node{ root, root_left, root_right, root_right_left })[0..]);
+//         const new_root_idx = T.rotateLeft(nodes.items, &colours, &nodes.items[root.idx], true);
 
-        try expect(new_root_idx == root_right.idx);
+//         try expect(new_root_idx == root_right.idx);
 
-        try expect(nodes.items[root_right.idx].parent_idx == NULL_IDX);
-        try expect(nodes.items[root_right.idx].left_idx == root.idx);
-        try expect(nodes.items[root_right.idx].right_idx == NULL_IDX);
-        try expect(isRed(&colours, root_right.idx) == false);
+//         try expect(nodes.items[root_right.idx].parent_idx == NULL_IDX);
+//         try expect(nodes.items[root_right.idx].left_idx == root.idx);
+//         try expect(nodes.items[root_right.idx].right_idx == NULL_IDX);
+//         try expect(isRed(&colours, root_right.idx) == false);
 
-        try expect(nodes.items[root.idx].parent_idx == root_right.idx);
-        try expect(nodes.items[root.idx].left_idx == root_left.idx);
-        try expect(nodes.items[root.idx].right_idx == root_right_left.idx);
-        try expect(isRed(&colours, root.idx) == true);
+//         try expect(nodes.items[root.idx].parent_idx == root_right.idx);
+//         try expect(nodes.items[root.idx].left_idx == root_left.idx);
+//         try expect(nodes.items[root.idx].right_idx == root_right_left.idx);
+//         try expect(isRed(&colours, root.idx) == true);
 
-        try expect(nodes.items[root_left.idx].parent_idx == root.idx);
-        try expect(nodes.items[root_left.idx].left_idx == NULL_IDX);
-        try expect(nodes.items[root_left.idx].right_idx == NULL_IDX);
-        try expect(isRed(&colours, root_left.idx) == false);
+//         try expect(nodes.items[root_left.idx].parent_idx == root.idx);
+//         try expect(nodes.items[root_left.idx].left_idx == NULL_IDX);
+//         try expect(nodes.items[root_left.idx].right_idx == NULL_IDX);
+//         try expect(isRed(&colours, root_left.idx) == false);
 
-        try expect(nodes.items[root_right_left.idx].parent_idx == root.idx);
-        try expect(nodes.items[root_right_left.idx].left_idx == NULL_IDX);
-        try expect(nodes.items[root_right_left.idx].right_idx == NULL_IDX);
-        try expect(isRed(&colours, root_right_left.idx) == false);
-    }
+//         try expect(nodes.items[root_right_left.idx].parent_idx == root.idx);
+//         try expect(nodes.items[root_right_left.idx].left_idx == NULL_IDX);
+//         try expect(nodes.items[root_right_left.idx].right_idx == NULL_IDX);
+//         try expect(isRed(&colours, root_right_left.idx) == false);
+//     }
 
-    {
-        nodes.clearRetainingCapacity();
-        colours.setAll();
+//     {
+//         nodes.clearRetainingCapacity();
+//         colours.setAll();
 
-        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = 2, .parent_idx = NULL_IDX };
-        const root_left = Node{ .idx = 1, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root.idx };
-        const root_right = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root.idx };
+//         const root = Node{ .idx = 0, .left_idx = 1, .right_idx = 2, .parent_idx = NULL_IDX };
+//         const root_left = Node{ .idx = 1, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root.idx };
+//         const root_right = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root.idx };
 
-        colours.setValue(root.right_idx, Colour.Red);
-        nodes.appendSliceAssumeCapacity(([_]Node{ root, root_left, root_right })[0..]);
-        const new_root_idx = T.rotateLeft(nodes.items, &colours, &nodes.items[root.idx], true);
+//         colours.setValue(root.right_idx, Colour.Red);
+//         nodes.appendSliceAssumeCapacity(([_]Node{ root, root_left, root_right })[0..]);
+//         const new_root_idx = T.rotateLeft(nodes.items, &colours, &nodes.items[root.idx], true);
 
-        try expect(new_root_idx == root_right.idx);
+//         try expect(new_root_idx == root_right.idx);
 
-        try expect(nodes.items[root.idx].right_idx == NULL_IDX);
-    }
-}
+//         try expect(nodes.items[root.idx].right_idx == NULL_IDX);
+//     }
+// }
 
-test "rotateRight with parent and varying left_child cases" {
+test "rotateRight with parent and varying right_child cases" {
     const allocator = std.testing.allocator;
     const isRed = T.isRed;
 
@@ -956,5 +957,250 @@ test "rotateRight with parent and varying left_child cases" {
         const new_subtree_root = T.rotateRight(nodes.items, &colours, &nodes.items[subtree_root.idx], true);
         try expect(new_subtree_root == sub_left.idx);
         try expect(nodes.items[subtree_root.idx].left_idx == NULL_IDX);
+    }
+}
+
+test "rotateRight with no parent and varying left_child cases" {
+    const allocator = std.testing.allocator;
+    const isRed = T.isRed;
+
+    var nodes = try T.Nodes.initCapacity(allocator, 5);
+    var colours = try T.Colours.initFull(allocator, 5); //Sets all nodes to black;
+    defer nodes.deinit(allocator);
+    defer colours.deinit(allocator);
+
+    {
+        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = NULL_IDX, .parent_idx = NULL_IDX };
+        const left = Node{ .idx = 1, .left_idx = 2, .right_idx = 3, .parent_idx = 0 };
+        const left_left = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = left.idx };
+        const left_right = Node{ .idx = 3, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = left.idx };
+
+        nodes.appendSliceAssumeCapacity(([_]Node{ root, left, left_left, left_right })[0..]);
+        colours.setValue(left.idx, Colour.Red);
+        colours.setValue(left_left.idx, Colour.Red);
+
+        const new_root = T.rotateRight(nodes.items, &colours, &nodes.items[root.idx], true);
+        try expect(new_root == left.idx);
+
+        try expect(new_root == left.idx);
+
+        try expect(nodes.items[left.idx].parent_idx == NULL_IDX);
+        try expect(nodes.items[left.idx].left_idx == left_left.idx);
+        try expect(nodes.items[left.idx].right_idx == root.idx);
+        try expect(isRed(&colours, left.idx) == false);
+
+        try expect(nodes.items[left_left.idx].parent_idx == left.idx);
+        try expect(nodes.items[left_left.idx].left_idx == NULL_IDX);
+        try expect(nodes.items[left_left.idx].right_idx == NULL_IDX);
+        try expect(isRed(&colours, left_left.idx) == true);
+
+        try expect(nodes.items[root.idx].parent_idx == left.idx);
+        try expect(nodes.items[root.idx].left_idx == left_right.idx);
+        try expect(nodes.items[root.idx].right_idx == NULL_IDX);
+        try expect(isRed(&colours, root.idx) == true);
+
+        try expect(nodes.items[left_right.idx].parent_idx == root.idx);
+        try expect(nodes.items[left_right.idx].left_idx == NULL_IDX);
+        try expect(nodes.items[left_right.idx].right_idx == NULL_IDX);
+        try expect(isRed(&colours, left_right.idx) == false);
+    }
+
+    {
+        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = NULL_IDX, .parent_idx = NULL_IDX };
+        const left = Node{ .idx = 1, .left_idx = 2, .right_idx = NULL_IDX, .parent_idx = 0 };
+        const left_left = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = left.idx };
+
+        nodes.clearRetainingCapacity();
+        colours.setAll();
+
+        nodes.appendSliceAssumeCapacity(([_]Node{ root, left, left_left })[0..]);
+        colours.setValue(left.idx, Colour.Red);
+        colours.setValue(left_left.idx, Colour.Red);
+
+        const new_root = T.rotateRight(nodes.items, &colours, &nodes.items[root.idx], true);
+        try expect(new_root == left.idx);
+
+        try expect(nodes.items[root.idx].left_idx == NULL_IDX);
+    }
+}
+
+test "balanceTree colour flip" {
+    const allocator = std.testing.allocator;
+    const isRed = T.isRed;
+
+    var nodes = try T.Nodes.initCapacity(allocator, 5);
+    var colours = try T.Colours.initFull(allocator, 5); //Sets all nodes to black;
+    defer nodes.deinit(allocator);
+    defer colours.deinit(allocator);
+
+    //Flipping the root
+    {
+        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = 2, .parent_idx = NULL_IDX };
+        const left = Node{ .idx = 1, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 0 };
+        const right = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 0 };
+
+        nodes.appendSliceAssumeCapacity(([_]Node{ root, left, right })[0..]);
+        colours.setValue(left.idx, Colour.Red);
+        colours.setValue(right.idx, Colour.Red);
+
+        const new_root_idx = T.balanceTree(nodes.items, &colours, root.idx);
+        try expect(new_root_idx == root.idx);
+
+        try expect(nodes.items[root.idx].left_idx == left.idx);
+        try expect(nodes.items[root.idx].right_idx == right.idx);
+        try expect(nodes.items[root.idx].parent_idx == NULL_IDX);
+
+        try expect(isRed(&colours, root.idx) == false);
+        try expect(isRed(&colours, left.idx) == false);
+        try expect(isRed(&colours, right.idx) == false);
+    }
+
+    //Non-root
+    {
+        nodes.clearRetainingCapacity();
+        colours.setAll();
+        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = NULL_IDX, .parent_idx = NULL_IDX };
+        const subtree_root = Node{ .idx = 1, .left_idx = 2, .right_idx = 3, .parent_idx = root.idx };
+        const sub_left = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 1 };
+        const sub_right = Node{ .idx = 3, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 1 };
+
+        nodes.appendSliceAssumeCapacity(([_]Node{ root, subtree_root, sub_left, sub_right })[0..]);
+        colours.setValue(sub_left.idx, Colour.Red);
+        colours.setValue(sub_right.idx, Colour.Red);
+
+        const new_root_idx = T.balanceTree(nodes.items, &colours, subtree_root.idx);
+        try expect(new_root_idx == root.idx);
+
+        try expect(isRed(&colours, root.idx) == false);
+        try expect(isRed(&colours, subtree_root.idx) == true);
+        try expect(isRed(&colours, sub_left.idx) == false);
+        try expect(isRed(&colours, sub_right.idx) == false);
+    }
+}
+
+test "balanceTree rotateLeft" {
+    const allocator = std.testing.allocator;
+    const isRed = T.isRed;
+
+    var nodes = try T.Nodes.initCapacity(allocator, 5);
+    var colours = try T.Colours.initFull(allocator, 5); //Sets all nodes to black;
+    defer nodes.deinit(allocator);
+    defer colours.deinit(allocator);
+
+    //rotateLeft with parent and present right_left child
+    {
+        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = NULL_IDX, .parent_idx = NULL_IDX };
+        const subtree_root = Node{ .idx = 1, .left_idx = 2, .right_idx = 3, .parent_idx = root.idx }; //The node to be rotated
+        const subtree_left = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = subtree_root.idx };
+        const subtree_right = Node{ .idx = 3, .left_idx = 4, .right_idx = NULL_IDX, .parent_idx = subtree_root.idx };
+        const subtree_right_left = Node{ .idx = 4, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = subtree_right.idx };
+
+        nodes.appendSliceAssumeCapacity(([_]Node{ root, subtree_root, subtree_left, subtree_right, subtree_right_left })[0..]);
+        try expect(isRed(&colours, root.idx) == false); //Just in case someone flips the logic for which bit is red or black
+
+        colours.setValue(subtree_right.idx, Colour.Red);
+
+        const new_root_idx = T.balanceTree(nodes.items, &colours, subtree_root.idx);
+        try expect(new_root_idx == root.idx);
+
+        try expect(nodes.items[root.idx].parent_idx == NULL_IDX);
+        try expect(nodes.items[root.idx].left_idx == subtree_right.idx);
+        try expect(nodes.items[root.idx].right_idx == NULL_IDX);
+        try expect(isRed(&colours, root.idx) == false);
+
+        try expect(nodes.items[subtree_right.idx].parent_idx == root.idx);
+        try expect(nodes.items[subtree_right.idx].left_idx == subtree_root.idx);
+        try expect(nodes.items[subtree_right.idx].right_idx == NULL_IDX);
+        try expect(isRed(&colours, subtree_right.idx) == false);
+
+        try expect(nodes.items[subtree_root.idx].parent_idx == subtree_right.idx);
+        try expect(nodes.items[subtree_root.idx].left_idx == subtree_left.idx);
+        try expect(nodes.items[subtree_root.idx].right_idx == subtree_right_left.idx);
+        try expect(isRed(&colours, subtree_root.idx) == true);
+
+        try expect(nodes.items[subtree_left.idx].parent_idx == subtree_root.idx);
+        try expect(nodes.items[subtree_left.idx].left_idx == NULL_IDX);
+        try expect(nodes.items[subtree_left.idx].right_idx == NULL_IDX);
+        try expect(isRed(&colours, subtree_left.idx) == false);
+
+        try expect(nodes.items[subtree_right_left.idx].parent_idx == subtree_root.idx);
+        try expect(nodes.items[subtree_right_left.idx].left_idx == NULL_IDX);
+        try expect(nodes.items[subtree_right_left.idx].right_idx == NULL_IDX);
+        try expect(isRed(&colours, subtree_right_left.idx) == false);
+    }
+
+    //rotateLeft with parent and absent right_left child
+    {
+        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = NULL_IDX, .parent_idx = NULL_IDX };
+        const subtree_root = Node{ .idx = 1, .left_idx = 2, .right_idx = 3, .parent_idx = root.idx }; //The node to be rotated
+        const subtree_left = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = subtree_root.idx };
+        const subtree_right = Node{ .idx = 3, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = subtree_root.idx };
+
+        nodes.clearRetainingCapacity();
+        colours.setAll();
+
+        nodes.appendSliceAssumeCapacity(([_]Node{ root, subtree_root, subtree_left, subtree_right })[0..]);
+        colours.setValue(subtree_right.idx, Colour.Red);
+
+        const new_root_idx = T.balanceTree(nodes.items, &colours, subtree_root.idx);
+        try expect(new_root_idx == root.idx);
+
+        try expect(nodes.items[subtree_root.idx].right_idx == NULL_IDX);
+        try expect(isRed(&colours, subtree_root.idx) == true);
+    }
+
+    //rotateLeft with no parent and present right_left child
+    {
+        nodes.clearRetainingCapacity();
+        colours.setAll();
+
+        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = 2, .parent_idx = NULL_IDX };
+        const root_left = Node{ .idx = 1, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root.idx };
+        const root_right = Node{ .idx = 2, .left_idx = 3, .right_idx = NULL_IDX, .parent_idx = root.idx };
+        const root_right_left = Node{ .idx = 3, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root_right.idx };
+
+        colours.setValue(root.right_idx, Colour.Red);
+        nodes.appendSliceAssumeCapacity(([_]Node{ root, root_left, root_right, root_right_left })[0..]);
+        const new_root_idx = T.balanceTree(nodes.items, &colours, root.idx);
+
+        try expect(new_root_idx == root_right.idx);
+
+        try expect(nodes.items[root_right.idx].parent_idx == NULL_IDX);
+        try expect(nodes.items[root_right.idx].left_idx == root.idx);
+        try expect(nodes.items[root_right.idx].right_idx == NULL_IDX);
+        try expect(isRed(&colours, root_right.idx) == false);
+
+        try expect(nodes.items[root.idx].parent_idx == root_right.idx);
+        try expect(nodes.items[root.idx].left_idx == root_left.idx);
+        try expect(nodes.items[root.idx].right_idx == root_right_left.idx);
+        try expect(isRed(&colours, root.idx) == true);
+
+        try expect(nodes.items[root_left.idx].parent_idx == root.idx);
+        try expect(nodes.items[root_left.idx].left_idx == NULL_IDX);
+        try expect(nodes.items[root_left.idx].right_idx == NULL_IDX);
+        try expect(isRed(&colours, root_left.idx) == false);
+
+        try expect(nodes.items[root_right_left.idx].parent_idx == root.idx);
+        try expect(nodes.items[root_right_left.idx].left_idx == NULL_IDX);
+        try expect(nodes.items[root_right_left.idx].right_idx == NULL_IDX);
+        try expect(isRed(&colours, root_right_left.idx) == false);
+    }
+
+    //rotateLeft with parent and no present right_left child
+    {
+        nodes.clearRetainingCapacity();
+        colours.setAll();
+
+        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = 2, .parent_idx = NULL_IDX };
+        const root_left = Node{ .idx = 1, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root.idx };
+        const root_right = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root.idx };
+
+        colours.setValue(root.right_idx, Colour.Red);
+        nodes.appendSliceAssumeCapacity(([_]Node{ root, root_left, root_right })[0..]);
+        const new_root_idx = T.balanceTree(nodes.items, &colours, root.idx);
+
+        try expect(new_root_idx == root_right.idx);
+
+        try expect(nodes.items[root.idx].right_idx == NULL_IDX);
     }
 }
