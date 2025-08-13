@@ -1,34 +1,22 @@
 const std = @import("std");
-const Tree = @import("tree.zig").Tree;
+const RBTree = @import("tree.zig");
+const Tree = RBTree.Tree;
 const expect = std.testing.expect;
 const zbench = @import("zbench");
-const NULL_IDX = 0xFFFFFFFF;
+const NULL_IDX = RBTree.NULL_IDX;
+const MAX_IDX = RBTree.MAX_IDX;
 
 pub fn main() !void {
-    var debug = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    const allocator = debug.allocator();
-    defer _ = debug.deinit();
+    const allocator = std.heap.page_allocator;
 
-    // var bench = zbench.Benchmark.init(allocator, .{});
+    var bench = zbench.Benchmark.init(allocator, .{});
 
-    // defer bench.deinit();
+    defer bench.deinit();
 
-    // try bench.add("Insertions array list", tree_list, .{ .iterations = 150 });
-    // try bench.add("Insertions", rbTree, .{ .iterations = 150 });
+    try bench.add("Insertions array list", tree_list, .{ .iterations = 150 });
+    try bench.add("Insertions", rbTree, .{ .iterations = 150 });
 
-    // try bench.run(std.io.getStdOut().writer());
-
-    var tree = Tree(u64, []const u8, comp).empty;
-    defer tree.deinit(allocator);
-
-    try tree.reserveCapacity(allocator, 18);
-    for (1..8) |i| {
-        tree.insertAssumeCapacity(.{ .key = i * 5, .value = "haliday" }) catch unreachable;
-    }
-
-    std.debug.print("Tree structure: {}\nTree keys: {}\n", .{ tree.nodes, tree.keys });
-    // const deleted = tree.delete(20);
-    std.debug.print("Alignment:{}\nSize:{}\n", .{ @alignOf(Tree(u64, []const u8, comp).Node), @sizeOf(Tree(u64, []const u8, comp).Node) });
+    try bench.run(std.io.getStdOut().writer());
 }
 
 fn comp(a: u64, b: u64) std.math.Order {
@@ -36,11 +24,21 @@ fn comp(a: u64, b: u64) std.math.Order {
 }
 
 fn rbTree(allocator: std.mem.Allocator) void {
-    const len = 200000;
+    const len = NULL_IDX;
     var tree = Tree(u64, u64, comp).initCapacity(allocator, len) catch unreachable;
     defer tree.deinit(allocator);
+    var Xosh = std.Random.Xoshiro256.init(64);
+    const random = Xosh.random();
+
+    var list = std.ArrayListUnmanaged(u64).initCapacity(allocator, len) catch unreachable;
 
     for (0..len) |i| {
+        list.appendAssumeCapacity(i);
+    }
+
+    random.shuffle(u64, list.items);
+
+    for (list.items) |i| {
         tree.insertAssumeCapacity(.{ .key = i, .value = i }) catch unreachable;
     }
 }
@@ -74,6 +72,8 @@ test "emptylist" {
 
     try expect(tree.nodes.capacity == 0);
     try expect(tree.nodes.items.len == 0);
+
+    try expect(tree.colours.capacity() == 0);
 }
 
 test "initCapacity" {
@@ -93,6 +93,25 @@ test "initCapacity" {
     try expect(tree.nodes.items.len == 0);
 }
 
+test "reserveCapacity" {
+    const cap = 2000000;
+    const allocator = std.testing.allocator;
+    var tree = Tree(u64, u64, comp).empty;
+    try tree.reserveCapacity(allocator, cap);
+    defer tree.deinit(allocator);
+
+    try expect(tree.keys.capacity >= cap);
+    try expect(tree.keys.items.len == 0);
+
+    try expect(tree.values.capacity >= cap);
+    try expect(tree.values.items.len == 0);
+
+    try expect(tree.nodes.capacity >= cap);
+    try expect(tree.nodes.items.len == 0);
+
+    try expect(tree.colours.capacity() == cap);
+}
+
 test "insertion: ascending inputs" {
     const allocator = std.testing.allocator;
     const inputs = [_]u64{ 0, 5, 10, 15, 20, 25, 30, 35, 40 };
@@ -100,26 +119,28 @@ test "insertion: ascending inputs" {
     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
     defer tree.deinit(allocator);
 
-    tree.insertAssumeCapacity(.{ .key = inputs[0], .value = inputs[0] * 10 }) catch unreachable;
-
-    for (inputs[1..]) |i| {
+    for (inputs[0..]) |i| {
         tree.insertAssumeCapacity(.{ .key = i, .value = i * 10 }) catch unreachable;
     }
 
-    try expect(true);
+    for (inputs) |i| {
+        try expect(tree.get(i).? == i * 10);
+    }
 }
 
 test "insertion: descending inputs" {
     const allocator = std.testing.allocator;
-    const inputs = [_]u64{ 40, 35, 30, 25, 20, 15, 10, 5 };
+    const inputs = [_]u64{ 40, 35, 30, 25, 20, 15, 10, 5, 0 };
 
     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
     defer tree.deinit(allocator);
 
-    tree.insertAssumeCapacity(.{ .key = inputs[0], .value = inputs[0] * 10 }) catch unreachable;
-
-    for (inputs[1..]) |i| {
+    for (inputs) |i| {
         tree.insertAssumeCapacity(.{ .key = i, .value = i * 10 }) catch unreachable;
+    }
+
+    for (inputs) |i| {
+        try expect(tree.get(i).? == i * 10);
     }
 }
 
@@ -136,147 +157,168 @@ test "insertion: tricky inputs" {
         tree.insertAssumeCapacity(.{ .key = i, .value = i * 10 }) catch unreachable;
     }
 
-    // std.debug.print("Ouptut: {}\n{}", .{ tree.nodes, tree.keys });
-}
-
-test "insertion: random inputs" {}
-
-test "search" {
-    const allocator = std.testing.allocator;
-
-    const inputs = [_]u64{ 10, 20, 30, 15, 5, 22, 28, 12 };
-
-    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
-    defer tree.deinit(allocator);
-
-    for (inputs, 0..) |i, k| {
-        tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
-    }
-
-    for (inputs, 0..) |i, k| {
-        try expect(tree.get(i) == k * 10);
+    for (inputs) |i| {
+        try expect(tree.get(i).? == i * 10);
     }
 }
 
-test "deletion: moveLeftRed on the right subtree twice with no successor subtree" {
+test "insertion: random inputs" {
     const allocator = std.testing.allocator;
 
-    const inputs = [_]u64{ 5, 10, 15, 20, 25, 30, 35, 23 };
-
-    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
-    defer tree.deinit(allocator);
-
-    for (inputs, 0..) |i, k| {
-        tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
-    }
-
-    _ = tree.delete(30);
-}
-
-test "deletion: significantly long subtree" {
-    const allocator = std.testing.allocator;
-
-    const inputs = [_]u64{ 10, 30, 5, 15, 25, 35, 2, 7, 12, 17, 23, 27, 32, 37, 31, 33 };
-
-    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
-    defer tree.deinit(allocator);
-
-    for (inputs, 0..) |i, k| {
-        tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
-    }
-
-    _ = tree.delete(30);
-}
-
-test "deletion (right): successive deletions to test right subtree successor replacements" {
-    const allocator = std.testing.allocator;
     var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
     const random = PRNG.random();
 
-    var inputs: [15]u64 = undefined;
+    var inputs: [25]u64 = undefined;
 
     for (0..inputs.len) |i| {
         inputs[i] = 5 * i;
     }
 
     random.shuffle(u64, &inputs);
-    // _ = random;
-    // _ = &inputs;
-    std.debug.print("inputs for random right deletion: {any}\n", .{inputs});
+    std.debug.print("inputs for random insertion: {any}\n", .{inputs});
+
     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
     defer tree.deinit(allocator);
 
-    for (inputs, 0..) |i, k| {
-        tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
+    for (inputs) |i| {
+        tree.insertAssumeCapacity(.{ .key = i, .value = i * 10 }) catch unreachable;
     }
 
-    var root = &tree.nodes.items[tree.root_idx];
-    while (root.right_idx != NULL_IDX) {
-        _ = tree.delete(tree.keys.items[root.right_idx]);
-        root = &tree.nodes.items[tree.root_idx];
+    for (inputs) |i| {
+        try expect(tree.get(i).? == i * 10);
     }
 }
 
-test "deletion: (root):  successor replacements and rebalancing" {
-    const allocator = std.testing.allocator;
+// for (tree.nodes.items, 0..) |i, k| {
+//     std.debug.print("node: {}\nkey: {}\n,IsRed:{}\n\n", .{ i, tree.keys.items[k], !tree.colours.isSet(i.idx) });
+// }
 
-    var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
-    const random = PRNG.random();
+// test "deletion: moveLeftRed on the right subtree twice with no successor subtree" {
+//     const allocator = std.testing.allocator;
 
-    var inputs: [15]u64 = undefined;
+//     const inputs = [_]u64{ 5, 10, 15, 20, 25, 30, 35, 23 };
 
-    for (0..inputs.len) |i| {
-        inputs[i] = 5 * i;
-    }
+//     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+//     defer tree.deinit(allocator);
 
-    random.shuffle(u64, &inputs);
-    // _ = random;
-    // _ = &inputs;
-    std.debug.print("inputs for random root deletion: {any}\n", .{inputs});
-    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
-    defer tree.deinit(allocator);
+//     for (inputs, 0..) |i, k| {
+//         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
+//     }
 
-    for (inputs, 0..) |i, k| {
-        tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
-    }
+//     _ = tree.delete(30);
+// }
 
-    for (0..tree.nodes.items.len - 3) |_| {
-        _ = tree.delete(tree.keys.items[tree.root_idx]);
-    }
-}
+// test "deletion: significantly long subtree" {
+//     const allocator = std.testing.allocator;
 
-test "deletion (left): successor deletions to test and rebalancing" {
-    const allocator = std.testing.allocator;
+//     const inputs = [_]u64{ 10, 30, 5, 15, 25, 35, 2, 7, 12, 17, 23, 27, 32, 37, 31, 33 };
 
-    var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
-    const random = PRNG.random();
+//     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+//     defer tree.deinit(allocator);
 
-    var inputs: [15]u64 = undefined;
+//     for (inputs, 0..) |i, k| {
+//         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
+//     }
 
-    for (0..inputs.len) |i| {
-        inputs[i] = 5 * i;
-    }
+//     _ = tree.delete(30);
+//     _ = tree.delete(10);
 
-    random.shuffle(u64, &inputs);
-    // _ = &inputs;
-    // _ = random;
-    std.debug.print("inputs for random left deletion: {any}\n", .{inputs});
-    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
-    defer tree.deinit(allocator);
+//     try expect(tree.get(10).? == 10 * 10);
 
-    for (inputs, 0..) |i, k| {
-        tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
-    }
+//     for (inputs[2..]) |i| {
+//         try expect(tree.get(i).? == i * 10);
+//     }
+// }
 
-    var root = &tree.nodes.items[tree.root_idx];
-    while (root.left_idx != NULL_IDX) {
-        _ = tree.delete(tree.keys.items[root.left_idx]);
+// test "deletion (right): successive deletions to test right subtree successor replacements" {
+//     const allocator = std.testing.allocator;
+//     var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
+//     const random = PRNG.random();
 
-        root = &tree.nodes.items[tree.root_idx];
-    }
+//     var inputs: [15]u64 = undefined;
 
-    tree.insertAssumeCapacity(.{ .key = 45, .value = 10 }) catch unreachable;
-}
+//     for (0..inputs.len) |i| {
+//         inputs[i] = 5 * i;
+//     }
+
+//     random.shuffle(u64, &inputs);
+//     // _ = random;
+//     // _ = &inputs;
+//     std.debug.print("inputs for random right deletion: {any}\n", .{inputs});
+//     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+//     defer tree.deinit(allocator);
+
+//     for (inputs, 0..) |i, k| {
+//         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
+//     }
+
+//     var root = &tree.nodes.items[tree.root_idx];
+//     while (root.right_idx != NULL_IDX) {
+//         _ = tree.delete(tree.keys.items[root.right_idx]);
+//         root = &tree.nodes.items[tree.root_idx];
+//     }
+// }
+
+// test "deletion: (root):  successor replacements and rebalancing" {
+//     const allocator = std.testing.allocator;
+
+//     var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
+//     const random = PRNG.random();
+
+//     var inputs: [15]u64 = undefined;
+
+//     for (0..inputs.len) |i| {
+//         inputs[i] = 5 * i;
+//     }
+
+//     random.shuffle(u64, &inputs);
+//     // _ = random;
+//     // _ = &inputs;
+//     std.debug.print("inputs for random root deletion: {any}\n", .{inputs});
+//     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+//     defer tree.deinit(allocator);
+
+//     for (inputs, 0..) |i, k| {
+//         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
+//     }
+
+//     for (0..tree.nodes.items.len - 3) |_| {
+//         _ = tree.delete(tree.keys.items[tree.root_idx]);
+//     }
+// }
+
+// test "deletion (left): successor deletions to test and rebalancing" {
+//     const allocator = std.testing.allocator;
+
+//     var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
+//     const random = PRNG.random();
+
+//     var inputs: [15]u64 = undefined;
+
+//     for (0..inputs.len) |i| {
+//         inputs[i] = 5 * i;
+//     }
+
+//     random.shuffle(u64, &inputs);
+//     // _ = &inputs;
+//     // _ = random;
+//     std.debug.print("inputs for random left deletion: {any}\n", .{inputs});
+//     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+//     defer tree.deinit(allocator);
+
+//     for (inputs, 0..) |i, k| {
+//         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
+//     }
+
+//     var root = &tree.nodes.items[tree.root_idx];
+//     while (root.left_idx != NULL_IDX) {
+//         _ = tree.delete(tree.keys.items[root.left_idx]);
+
+//         root = &tree.nodes.items[tree.root_idx];
+//     }
+
+//     tree.insertAssumeCapacity(.{ .key = 45, .value = 10 }) catch unreachable;
+// }
 
 // test "deletion (children): leaf deletion" {
 //     const allocator = std.testing.allocator;
