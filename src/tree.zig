@@ -600,7 +600,8 @@ pub fn Tree(
                 // if (left.colour == .Red) break :blk false;
                 if (isRed(colours, node.left_idx)) break :blk false;
                 const left = &nodes[node.left_idx];
-                break :blk left.left_idx == NULL_IDX or (&nodes[left.left_idx]).colour == .Black;
+                // break :blk left.left_idx == NULL_IDX or (&nodes[left.left_idx]).colour == .Black;
+                break :blk left.left_idx == NULL_IDX or !isRed(colours, left.left_idx);
             };
             if (move_left_red) {
                 const moved_idx = moveLeftRed(nodes, colours, node.idx);
@@ -610,20 +611,21 @@ pub fn Tree(
 
             node.left_idx = removeSuccessorNode(nodes, colours, node.left_idx, index_ptr);
 
+            //todo: This might be redundant. Do more testing to confirm
             if (node.left_idx != NULL_IDX) {
                 const left = &nodes[node.left_idx];
                 left.parent_idx = node.idx;
             }
 
-            const node_idx = fixUp(nodes, colours, node.idx);
-            assert(node_idx != NULL_IDX);
-            return node_idx;
+            const balanced_idx = fixUp(nodes, colours, node.idx);
+            assert(balanced_idx != NULL_IDX);
+            return balanced_idx;
         }
 
         ///Fixes up the sub-tree after a delete operation
         ///
         /// We always balance/fix-up from the perspective of the parent - It makes things easier to reason about
-        pub fn fixUp(nodes: []Node, colours: *Colour, parent_idx: u32) u32 {
+        pub fn fixUp(nodes: []Node, colours: *Colours, parent_idx: u32) u32 {
             assert(parent_idx != NULL_IDX);
 
             {
@@ -631,7 +633,8 @@ pub fn Tree(
 
                 const can_flip = blk: {
                     if (parent_node.left_idx == NULL_IDX or parent_node.right_idx == NULL_IDX) break :blk false;
-                    break :blk (&nodes[parent_node.left_idx]).colour == .Red and (&nodes[parent_node.right_idx]).colour == .Red;
+                    break :blk isRed(colours, parent_node.left_idx) and isRed(colours, parent_node.right_idx);
+                    // break :blk (&nodes[parent_node.left_idx]).colour == .Red and (&nodes[parent_node.right_idx]).colour == .Red;
                 };
 
                 if (can_flip) {
@@ -643,17 +646,20 @@ pub fn Tree(
             var parent_node = &nodes[parent_idx];
             const hanging_right_link = blk: {
                 if (parent_node.right_idx == NULL_IDX) break :blk false;
-                break :blk (&nodes[parent_node.right_idx]).colour == .Red;
+                // break :blk (&nodes[parent_node.right_idx]).colour == .Red;
+                break :blk isRed(colours, parent_node.right_idx);
             };
 
             if (hanging_right_link) {
-                const new_parent_idx = rotateLeft(nodes, parent_node, true);
+                const new_parent_idx = rotateLeft(nodes, colours, parent_node, true);
                 assert(new_parent_idx != NULL_IDX);
                 parent_node = &nodes[new_parent_idx];
                 const can_flip = blk: {
-                    const left = &nodes[parent_node.left_idx]; //Because we just rotated left, we are guaranteed to have a left child
                     if (parent_node.right_idx == NULL_IDX) break :blk false;
-                    break :blk left.colour == .Red and (&nodes[parent_node.right_idx]).colour == .Red;
+                    // break :blk left.colour == .Red and (&nodes[parent_node.right_idx]).colour == .Red;
+
+                    //Because we just rotated left, we are guaranteed to have a left child
+                    break :blk isRed(colours, parent_node.left_idx) and isRed(colours, parent_node.right_idx);
                 };
 
                 //This should never happen, but catch this in case it does and verify the logic
@@ -662,16 +668,19 @@ pub fn Tree(
 
             const double_left_red = blk: {
                 if (parent_node.left_idx == NULL_IDX) break :blk false;
+                // if (left.colour != .Red) break :blk false;
+                if (!isRed(colours, parent_node.left_idx)) break :blk false;
+
                 const left = &nodes[parent_node.left_idx];
-                if (left.colour != .Red) break :blk false;
-                break :blk left.left_idx != NULL_IDX and (&nodes[left.left_idx]).colour == .Red;
+                // break :blk left.left_idx != NULL_IDX and (&nodes[left.left_idx]).colour == .Red;
+                break :blk left.left_idx != NULL_IDX and isRed(colours, left.left_idx);
             };
 
             if (double_left_red) {
-                const new_parent_idx = rotateRight(nodes, parent_node, true);
+                const new_parent_idx = rotateRight(nodes, colours, parent_node, true);
                 assert(new_parent_idx != NULL_IDX);
                 parent_node = &nodes[new_parent_idx];
-                colourFlip(nodes, parent_node, true); //After resolving a double left red, we always need a colour flip
+                colourFlip(colours, parent_node, true); //After resolving a double left red, we always need a colour flip
             }
 
             return parent_node.idx;
@@ -788,10 +797,10 @@ pub fn Tree(
 
 // ----------------- Tests -----------------
 
-fn test_cmp(a: u8, b: u8) std.math.Order {
+fn test_cmp(a: u64, b: u64) std.math.Order {
     return std.math.order(a, b);
 }
-const T = Tree(u8, u8, test_cmp);
+const T = Tree(u64, u64, test_cmp);
 const expect = std.testing.expect;
 
 test "isRed" {
@@ -1300,5 +1309,109 @@ test "moveLeftRed" {
         try expect(isRed(&colours, right.idx) == false);
 
         try expect(isRed(&colours, right_left.left_idx) == false);
+    }
+}
+
+test "fixUp" {
+    const allocator = std.testing.allocator;
+    const isRed = T.isRed;
+
+    var nodes = try T.Nodes.initCapacity(allocator, 7);
+    var colours = try T.Colours.initFull(allocator, 7); //Sets all nodes to black;
+    defer nodes.deinit(allocator);
+    defer colours.deinit(allocator);
+
+    //fixup colour flip
+    {
+        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = 2, .parent_idx = NULL_IDX };
+        const left = Node{ .idx = 1, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 0 };
+        const right = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 0 };
+
+        colours.setValue(left.idx, Colour.Red);
+        colours.setValue(right.idx, Colour.Red);
+
+        nodes.appendSliceAssumeCapacity(&[_]Node{ root, left, right });
+
+        const new_root_idx = T.fixUp(nodes.items, &colours, root.idx);
+
+        try expect(new_root_idx == root.idx);
+        try expect(nodes.items[root.idx].left_idx == left.idx);
+        try expect(nodes.items[root.idx].right_idx == right.idx);
+
+        try expect(isRed(&colours, root.idx) == true);
+        try expect(isRed(&colours, left.idx) == false);
+        try expect(isRed(&colours, right.idx) == false);
+    }
+
+    //fixup hanging right red link
+    {
+        nodes.clearRetainingCapacity();
+        colours.setAll();
+
+        const root = Node{ .idx = 0, .left_idx = NULL_IDX, .right_idx = 1, .parent_idx = NULL_IDX };
+        const right = Node{ .idx = 1, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 0 };
+        colours.setValue(right.idx, Colour.Red);
+
+        nodes.appendSliceAssumeCapacity(&[_]Node{ root, right });
+
+        const new_root_idx = T.fixUp(nodes.items, &colours, root.idx);
+        try expect(new_root_idx == right.idx);
+
+        try expect(isRed(&colours, right.idx) == false);
+        try expect(isRed(&colours, root.idx) == true);
+    }
+
+    //fixup double red left links
+    {
+        nodes.clearRetainingCapacity();
+        colours.setAll();
+
+        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = NULL_IDX, .parent_idx = NULL_IDX };
+        const left = Node{ .idx = 1, .left_idx = 2, .right_idx = NULL_IDX, .parent_idx = 0 };
+        const left_left = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 1 };
+
+        nodes.appendSliceAssumeCapacity(&[_]Node{ root, left, left_left });
+        colours.setValue(left.idx, Colour.Red);
+        colours.setValue(left_left.idx, Colour.Red);
+
+        const new_root_idx = T.fixUp(nodes.items, &colours, root.idx);
+
+        try expect(new_root_idx == left.idx);
+        try expect(isRed(&colours, left.idx) == true);
+        try expect(isRed(&colours, left_left.idx) == false);
+        try expect(isRed(&colours, root.idx) == false);
+    }
+}
+
+test "removeSuccessorNode" {
+    const allocator = std.testing.allocator;
+
+    var tree = try T.initCapacity(allocator, 17);
+    defer tree.deinit(allocator);
+
+    //With left_idx and moveLeftRed
+    {
+        for (0..7) |i| {
+            try tree.insertAssumeCapacity(.{ .key = @intCast(i * 5), .value = i * 10 });
+        }
+
+        var index_ptr: u32 = NULL_IDX;
+
+        // const keys = [_]u6{ 15, 5, 25, 0, 10, 5, 30 };
+        // nodes.appendSliceAssumeCapacity(([_]Node{ root, left, right, left_left, left_right, right_left, right_right })[0..]);
+
+        const new_root_idx = T.removeSuccessorNode(tree.nodes.items, &tree.colours, tree.root_idx, &index_ptr);
+        // for (tree.nodes.items) |node| {
+        //     std.debug.print("\nNode:{}\nKey:{}. isRed:{}\n", .{ node, tree.keys.items[node.idx], T.isRed(&tree.colours, node.idx) });
+        // }
+        try expect(index_ptr == 0);
+        try expect(tree.keys.items[new_root_idx] == 25);
+        try expect(T.isRed(&tree.colours, new_root_idx) == true);
+
+        const new_root_left_idx = 3;
+        const successor_parent_idx = 1;
+
+        try expect(tree.nodes.items[new_root_idx].left_idx == new_root_left_idx);
+        try expect(tree.nodes.items[successor_parent_idx].left_idx == NULL_IDX);
     }
 }
