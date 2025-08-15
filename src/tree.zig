@@ -366,221 +366,259 @@ pub fn Tree(
         ///This method assumes there is a node to delete
         ///
         ///Make sure to verify that the node exists with a search first before calling this
-        // pub fn deleteNode(nodes: []Node, colours: *Colours, keys: []const Key, start_idx: u32, key: K) u32 {
-        //     assert(start_idx != NULL_IDX);
-        //     var cmp = cmp_fn(key, keys[start_idx]);
-        //     // std.debug.print("\n\nDeleteNode called for {} at {}\n", .{ key, keys[start_idx] });
+        pub fn deleteNode(nodes: []Node, colours: *Colours, keys: []const Key, start_idx: u32, key: K) u32 {
+            assert(start_idx != NULL_IDX);
+            var cmp = cmp_fn(key, keys[start_idx]);
+            // std.debug.print("\n\nDeleteNode called for {} at {}\n", .{ key, keys[start_idx] });
 
-        //     if (cmp == .lt) {
-        //         var node = &nodes[start_idx];
-        //         assert(node.left_idx != NULL_IDX);
+            if (cmp == .lt) {
+                var node = &nodes[start_idx];
+                assert(node.left_idx != NULL_IDX);
 
-        //         const move_left_red = blk: {
-        //             const left = &nodes[node.left_idx];
-        //             if (left.colour == .Red) break :blk false;
+                const move_left_red = blk: {
+                    // if (left.colour == .Red) break :blk false;
+                    if (isRed(colours, node.left_idx)) break :blk false;
+                    const left = &nodes[node.left_idx];
 
-        //             //This will short-circuit and return true without trying the second one if the first condition is met. Neat!
-        //             break :blk left.left_idx == NULL_IDX or (&nodes[left.left_idx]).colour == .Black;
-        //         };
+                    //This will short-circuit and return true without trying the second one if the first condition is met. Neat!
+                    // break :blk left.left_idx == NULL_IDX or (&nodes[left.left_idx]).colour == .Black;
+                    break :blk left.left_idx == NULL_IDX or !isRed(colours, left.left_idx);
+                };
 
-        //         if (move_left_red) {
-        //             const moved_idx = moveLeftRed(nodes, node.idx);
-        //             assert(moved_idx != NULL_IDX);
-        //             node = &nodes[moved_idx];
-        //         }
+                if (move_left_red) {
+                    const moved_idx = moveLeftRed(nodes, colours, node.idx);
+                    assert(moved_idx != NULL_IDX);
+                    node = &nodes[moved_idx];
+                }
 
-        //         node.left_idx = deleteNode(nodes, keys, node.left_idx, key);
-        //         //
-        //         if (node.left_idx != NULL_IDX) {
-        //             const left = &nodes[node.left_idx];
-        //             left.parent_idx = node.idx;
-        //         }
-        //         const node_idx = fixUp(nodes, node.idx);
-        //         assert(node_idx != NULL_IDX);
-        //         node = &nodes[node_idx];
-        //         if (node.parent_idx == NULL_IDX) {
-        //             node.colour = .Black;
-        //         }
-        //         return node.idx;
-        //     }
+                node.left_idx = deleteNode(nodes, colours, keys, node.left_idx, key);
+                //
+                if (node.left_idx != NULL_IDX) {
+                    const left = &nodes[node.left_idx];
+                    left.parent_idx = node.idx;
+                }
+                const node_idx = fixUp(nodes, colours, node.idx);
+                assert(node_idx != NULL_IDX);
+                node = &nodes[node_idx];
+                if (node.parent_idx == NULL_IDX) {
+                    // node.colour = .Black;
+                    colours.setValue(node.idx, Colour.Red);
+                }
+                return node.idx;
+            }
 
-        //     var node = &nodes[start_idx];
-        //     const rotate_right = node.left_idx != NULL_IDX and (&nodes[node.left_idx]).colour == .Red;
-        //     if (rotate_right) {
-        //         const subtree_head = rotateRight(nodes, node, false);
-        //         assert(subtree_head != NULL_IDX);
-        //         node = &nodes[subtree_head];
-        //         cmp = cmp_fn(key, keys[node.idx]); //Recompute this because we've changed the node being worked on
-        //     }
+            var node = &nodes[start_idx];
+            // const rotate_right = node.left_idx != NULL_IDX and (&nodes[node.left_idx]).colour == .Red;
+            const rotate_right = node.left_idx != NULL_IDX and isRed(colours, node.left_idx);
+            if (rotate_right) {
+                const subtree_head = rotateRight(nodes, colours, node, false);
+                assert(subtree_head != NULL_IDX);
+                node = &nodes[subtree_head];
+                cmp = cmp_fn(key, keys[node.idx]); //Recompute this because we've changed the node being worked on
+            }
 
-        //     const matched_to_leaf = cmp == .eq and node.right_idx == NULL_IDX;
-        //     if (matched_to_leaf) {
-        //         return NULL_IDX;
-        //     }
+            const matched_to_leaf = cmp == .eq and node.right_idx == NULL_IDX;
+            if (matched_to_leaf) {
+                return NULL_IDX;
+            }
 
-        //     assert(node.right_idx != NULL_IDX);
+            assert(node.right_idx != NULL_IDX);
 
-        //     const move_right_red = blk: {
-        //         if (node.right_idx == NULL_IDX) break :blk true;
-        //         const right = &nodes[node.right_idx];
-        //         if (right.colour == .Red) break :blk false;
+            const move_right_red = blk: {
+                if (node.right_idx == NULL_IDX) break :blk true;
+                // if (right.colour == .Red) break :blk false;
+                if (isRed(colours, node.right_idx)) break :blk false;
+                const right = &nodes[node.right_idx];
+                // break :blk right.left_idx == NULL_IDX or (&nodes[right.left_idx]).colour == .Black;
+                break :blk right.left_idx == NULL_IDX or !isRed(colours, right.left_idx);
+            };
 
-        //         break :blk right.left_idx == NULL_IDX or (&nodes[right.left_idx]).colour == .Black;
-        //     };
+            if (move_right_red) {
+                colourFlip(colours, nodes, node, false);
+                const left_left_red = blk: {
+                    if (node.left_idx == NULL_IDX) break :blk false;
+                    const left = &nodes[node.left_idx];
+                    // break :blk left.left_idx != NULL_IDX and (&nodes[left.left_idx]).colour == .Red;
+                    break :blk left.left_idx != NULL_IDX and isRed(colours, left.left_idx);
+                };
 
-        //     if (move_right_red) {
-        //         colourFlip(nodes, node, false);
-        //         const left_left_red = blk: {
-        //             if (node.left_idx == NULL_IDX) break :blk false;
-        //             const left = &nodes[node.left_idx];
-        //             break :blk left.left_idx != NULL_IDX and (&nodes[left.left_idx]).colour == .Red;
-        //         };
+                if (left_left_red) {
+                    const node_idx = rotateRight(nodes, colours, node, false);
+                    assert(node_idx != NULL_IDX);
+                    node = &nodes[node_idx];
+                    colourFlip(colours, nodes, node, false);
+                }
+            }
 
-        //         if (left_left_red) {
-        //             const node_idx = rotateRight(nodes, node, false);
-        //             assert(node_idx != NULL_IDX);
-        //             node = &nodes[node_idx];
-        //             colourFlip(nodes, node, false);
-        //         }
-        //     }
+            cmp = cmp_fn(key, keys[node.idx]);
+            if (cmp == .eq) {
+                node = replaceWithSuccessor(nodes, colours, node);
+                const node_idx = fixUp(nodes, colours, node.idx);
+                assert(node_idx != NULL_IDX);
+                node = &nodes[node_idx];
 
-        //     cmp = cmp_fn(key, keys[node.idx]);
-        //     if (cmp == .eq) {
-        //         node = replaceWithSuccessor(nodes, node);
-        //         const node_idx = fixUp(nodes, node.idx);
-        //         assert(node_idx != NULL_IDX);
-        //         node = &nodes[node_idx];
+                colourFlip(nodes, colours, node, false);
 
-        //         if (node.parent_idx == NULL_IDX) {
-        //             node.colour = .Black;
-        //         }
-        //         return node_idx;
-        //     }
-        //     node.right_idx = deleteNode(nodes, keys, node.right_idx, key);
+                const right_left_red = blk: {
+                    if (node.right_idx == NULL_IDX) break :blk false;
+                    const right = &nodes[node.right_idx];
+                    // break :blk right.left_idx != NULL_IDX and (&nodes[right.left_idx]).colour == .Red;
+                    break :blk right.left_idx != NULL_IDX and isRed(colours, right.left_idx);
+                };
 
-        //     if (node.right_idx != NULL_IDX) {
-        //         const right = &nodes[node.right_idx];
-        //         right.parent_idx = node.idx;
-        //     }
+                if (right_left_red) {
+                    var right_node = &nodes[node.right_idx];
+                    const right_idx = rotateRight(nodes, colours, right_node, false);
+                    assert(right_idx != NULL_IDX);
 
-        //     const node_idx = fixUp(nodes, node.idx);
-        //     assert(node_idx != NULL_IDX);
-        //     node = &nodes[node_idx];
-        //     if (node.parent_idx == NULL_IDX) {
-        //         node.colour = .Black;
-        //     }
+                    //todo: shouldn't this have already been done by the rotateRight function?
+                    node.right_idx = right_idx;
+                    right_node = &nodes[node.right_idx];
+                    right_node.parent_idx = node.idx;
 
-        //     return node.idx;
-        // }
+                    const subtree_root = rotateLeft(nodes, colours, node, false);
+                    assert(subtree_root != NULL_IDX);
+                    node = &nodes[subtree_root];
+                    colourFlip(nodes, colours, node, false);
+                }
 
-        // pub inline fn moveLeftRed(nodes: []Node, node_idx: u32) u32 {
-        //     assert(node_idx != NULL_IDX);
+                if (node.parent_idx == NULL_IDX) {
+                    // node.colour = .Black;
+                    colours.setValue(node.idx, Colour.Black);
+                }
+                return node_idx;
+            }
+            node.right_idx = deleteNode(nodes, colours, keys, node.right_idx, key);
 
-        //     var node = &nodes[node_idx];
-        //     colourFlip(nodes, node, false);
+            if (node.right_idx != NULL_IDX) {
+                const right = &nodes[node.right_idx];
+                right.parent_idx = node.idx;
+            }
 
-        //     const right_left_red = blk: {
-        //         if (node.right_idx == NULL_IDX) break :blk false;
-        //         const right = &nodes[node.right_idx];
-        //         break :blk right.left_idx != NULL_IDX and (&nodes[right.left_idx]).colour == .Red;
-        //     };
+            const node_idx = fixUp(nodes, colours, node.idx);
+            assert(node_idx != NULL_IDX);
+            node = &nodes[node_idx];
+            if (node.parent_idx == NULL_IDX) {
+                // node.colour = .Black;
+                colours.setValue(node.idx, Colour.Black);
+            }
 
-        //     if (right_left_red) {
-        //         var right_node = &nodes[node.right_idx];
-        //         const right_idx = rotateRight(nodes, right_node, false);
-        //         assert(right_idx != NULL_IDX);
+            return node.idx;
+        }
 
-        //         node.right_idx = right_idx;
-        //         right_node = &nodes[node.right_idx];
-        //         right_node.parent_idx = node.idx;
+        pub inline fn moveLeftRed(nodes: []Node, colours: *Colours, node_idx: u32) u32 {
+            assert(node_idx != NULL_IDX);
 
-        //         const subtree_root = rotateLeft(nodes, node, false);
-        //         assert(subtree_root != NULL_IDX);
-        //         node = &nodes[subtree_root];
-        //         colourFlip(nodes, node, false);
-        //     }
-        //     return node.idx;
-        // }
+            var node = &nodes[node_idx];
+            colourFlip(colours, node, false);
 
-        // pub inline fn replaceWithSuccessor(nodes: []Node, node: *Node) *Node {
-        //     assert(node.right_idx != NULL_IDX);
+            const right_left_red = blk: {
+                if (node.right_idx == NULL_IDX) break :blk false;
+                const right = &nodes[node.right_idx];
+                // break :blk right.left_idx != NULL_IDX and (&nodes[right.left_idx]).colour == .Red;
+                break :blk right.left_idx != NULL_IDX and isRed(colours, right.left_idx);
+            };
 
-        //     var successor_idx: u32 = NULL_IDX;
+            if (right_left_red) {
+                const right_node = &nodes[node.right_idx];
+                const right_idx = rotateRight(nodes, colours, right_node, false);
+                assert(right_idx != NULL_IDX);
 
-        //     node.right_idx = removeSuccessorNode(nodes, node.right_idx, &successor_idx);
+                // node.right_idx = right_idx;
+                // right_node = &nodes[node.right_idx];
+                // right_node.parent_idx = node.idx;
 
-        //     assert(successor_idx != NULL_IDX);
+                const subtree_root = rotateLeft(nodes, colours, node, false);
+                assert(subtree_root != NULL_IDX);
+                node = &nodes[subtree_root];
+                colourFlip(colours, node, false);
+            }
+            return node.idx;
+        }
 
-        //     const replacement_node = &nodes[successor_idx];
+        pub inline fn replaceWithSuccessor(nodes: []Node, colours: *Colours, node: *Node) *Node {
+            assert(node.right_idx != NULL_IDX);
 
-        //     replacement_node.left_idx = node.left_idx;
-        //     replacement_node.right_idx = node.right_idx;
-        //     replacement_node.parent_idx = node.parent_idx;
-        //     replacement_node.colour = node.colour;
-        //     //can't I just do node.key_idx = replacement_node.key_idx here?
+            var successor_idx: u32 = NULL_IDX;
 
-        //     //set node's parent and children's parent pointers to the new replacement node
+            node.right_idx = removeSuccessorNode(nodes, node.right_idx, &successor_idx);
 
-        //     if (node.right_idx != NULL_IDX) {
-        //         const right = &nodes[node.right_idx];
-        //         right.parent_idx = replacement_node.idx;
-        //     }
+            assert(successor_idx != NULL_IDX);
 
-        //     if (node.left_idx != NULL_IDX) {
-        //         const left = &nodes[node.left_idx];
-        //         left.parent_idx = replacement_node.idx;
-        //     }
+            const replacement_node = &nodes[successor_idx];
 
-        //     if (node.parent_idx != NULL_IDX) {
-        //         assert(node.parent_idx != node.idx); //I'm in a lot of trouble if this happens
-        //         const parent = &nodes[node.parent_idx];
+            replacement_node.left_idx = node.left_idx;
+            replacement_node.right_idx = node.right_idx;
+            replacement_node.parent_idx = node.parent_idx;
+            // replacement_node.colour = node.colour;
+            colours.setValue(replacement_node.idx, colours.isSet(node.idx));
+            //can't I just do node.key_idx = replacement_node.key_idx here?
 
-        //         if (parent.right_idx == node.idx) {
-        //             assert(parent.left_idx != node.idx);
-        //             parent.right_idx = replacement_node.idx;
-        //         } else {
-        //             assert(parent.left_idx == node.idx);
-        //             parent.left_idx = replacement_node.idx;
-        //         }
-        //     }
+            //set node's parent and children's parent pointers to the new replacement node
 
-        //     @memset(node[0..1], undefined); //Make sure to trigger an error if this is used elsewhere
+            if (node.right_idx != NULL_IDX) {
+                const right = &nodes[node.right_idx];
+                right.parent_idx = replacement_node.idx;
+            }
 
-        //     return replacement_node;
-        // }
+            if (node.left_idx != NULL_IDX) {
+                const left = &nodes[node.left_idx];
+                left.parent_idx = replacement_node.idx;
+            }
 
-        // pub fn removeSuccessorNode(
-        //     nodes: []Node,
-        //     start_idx: u32,
-        //     index_ptr: *u32, //An index which will be populated with the deleted node's index
-        // ) u32 {
-        //     var node = &nodes[start_idx];
-        //     if (node.left_idx == NULL_IDX) {
-        //         index_ptr.* = node.idx;
-        //         return NULL_IDX;
-        //     }
-        //     const move_left_red = blk: {
-        //         const left = &nodes[node.left_idx];
-        //         if (left.colour == .Red) break :blk false;
-        //         break :blk left.left_idx == NULL_IDX or (&nodes[left.left_idx]).colour == .Black;
-        //     };
-        //     if (move_left_red) {
-        //         const moved_idx = moveLeftRed(nodes, node.idx);
-        //         assert(moved_idx != NULL_IDX);
-        //         node = &nodes[moved_idx];
-        //     }
+            if (node.parent_idx != NULL_IDX) {
+                assert(node.parent_idx != node.idx); //I'm in a lot of trouble if this happens
+                const parent = &nodes[node.parent_idx];
 
-        //     node.left_idx = removeSuccessorNode(nodes, node.left_idx, index_ptr);
+                if (parent.right_idx == node.idx) {
+                    assert(parent.left_idx != node.idx);
+                    parent.right_idx = replacement_node.idx;
+                } else {
+                    assert(parent.left_idx == node.idx);
+                    parent.left_idx = replacement_node.idx;
+                }
+            }
 
-        //     if (node.left_idx != NULL_IDX) {
-        //         const left = &nodes[node.left_idx];
-        //         left.parent_idx = node.idx;
-        //     }
+            @memset(node[0..1], undefined); //Make sure to trigger an error if this is used elsewhere
 
-        //     const node_idx = fixUp(nodes, node.idx);
-        //     assert(node_idx != NULL_IDX);
-        //     return node_idx;
-        // }
+            return replacement_node;
+        }
+
+        pub fn removeSuccessorNode(
+            nodes: []Node,
+            colours: *Colours,
+            start_idx: u32,
+            ///An index variable which will be populated with the deleted node's index
+            index_ptr: *u32,
+        ) u32 {
+            var node = &nodes[start_idx];
+            if (node.left_idx == NULL_IDX) {
+                index_ptr.* = node.idx;
+                return NULL_IDX;
+            }
+            const move_left_red = blk: {
+                // if (left.colour == .Red) break :blk false;
+                if (isRed(colours, node.left_idx)) break :blk false;
+                const left = &nodes[node.left_idx];
+                break :blk left.left_idx == NULL_IDX or (&nodes[left.left_idx]).colour == .Black;
+            };
+            if (move_left_red) {
+                const moved_idx = moveLeftRed(nodes, colours, node.idx);
+                assert(moved_idx != NULL_IDX);
+                node = &nodes[moved_idx];
+            }
+
+            node.left_idx = removeSuccessorNode(nodes, colours, node.left_idx, index_ptr);
+
+            if (node.left_idx != NULL_IDX) {
+                const left = &nodes[node.left_idx];
+                left.parent_idx = node.idx;
+            }
+
+            const node_idx = fixUp(nodes, colours, node.idx);
+            assert(node_idx != NULL_IDX);
+            return node_idx;
+        }
 
         ///Fixes up the sub-tree after a delete operation
         ///
@@ -1182,5 +1220,85 @@ test "balanceTree rotateRight" {
         try expect(nodes.items[left_right.idx].left_idx == NULL_IDX);
         try expect(nodes.items[left_right.idx].right_idx == NULL_IDX);
         try expect(isRed(&colours, left_right.idx) == false);
+    }
+}
+
+test "moveLeftRed" {
+    const allocator = std.testing.allocator;
+    const isRed = T.isRed;
+
+    var nodes = try T.Nodes.initCapacity(allocator, 10);
+    var colours = try T.Colours.initFull(allocator, 10); //Sets all nodes to black;
+    defer nodes.deinit(allocator);
+    defer colours.deinit(allocator);
+
+    //No right_left_red
+    {
+        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = 2, .parent_idx = NULL_IDX };
+        const left = Node{ .idx = 1, .left_idx = 3, .right_idx = 4, .parent_idx = 0 };
+        const right = Node{ .idx = 2, .left_idx = 5, .right_idx = 6, .parent_idx = 0 };
+
+        const left_left = Node{ .idx = 3, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 1 };
+        const left_right = Node{ .idx = 4, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 1 };
+
+        const right_left = Node{ .idx = 5, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 2 };
+        const right_right = Node{ .idx = 6, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 2 };
+
+        nodes.appendSliceAssumeCapacity(([_]Node{ root, left, right, left_left, left_right, right_left, right_right })[0..]);
+
+        const new_root_idx = T.moveLeftRed(nodes.items, &colours, root.idx);
+        try expect(new_root_idx == root.idx);
+
+        try expect(isRed(&colours, root.idx) == true);
+        try expect(isRed(&colours, left.idx) == true);
+        try expect(isRed(&colours, right.idx) == true);
+
+        try expect(isRed(&colours, left_left.idx) == false);
+        try expect(isRed(&colours, left_right.idx) == false);
+
+        try expect(isRed(&colours, right_left.idx) == false);
+        try expect(isRed(&colours, right_right.idx) == false);
+    }
+
+    // With right_left_red
+    {
+        nodes.clearRetainingCapacity();
+        colours.setAll(); //sets all nodes to black
+
+        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = 2, .parent_idx = NULL_IDX };
+        const left = Node{ .idx = 1, .left_idx = 3, .right_idx = 4, .parent_idx = 0 };
+        const right = Node{ .idx = 2, .left_idx = 5, .right_idx = 6, .parent_idx = 0 };
+
+        const left_left = Node{ .idx = 3, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 1 };
+        const left_right = Node{ .idx = 4, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 1 };
+
+        const right_left = Node{ .idx = 5, .left_idx = 7, .right_idx = 8, .parent_idx = 2 };
+        const right_right = Node{ .idx = 6, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 2 };
+
+        const right_left_left = Node{ .idx = 7, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 5 };
+        const right_left_right = Node{ .idx = 8, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = 5 };
+
+        nodes.appendSliceAssumeCapacity(([_]Node{
+            root,
+            left,
+            right,
+            left_left,
+            left_right,
+            right_left,
+            right_right,
+            right_left_left,
+            right_left_right,
+        })[0..]);
+        colours.setValue(right_left.idx, Colour.Red);
+
+        const new_root_idx = T.moveLeftRed(nodes.items, &colours, root.idx);
+        try expect(new_root_idx == right_left.idx);
+        try expect(nodes.items[right_left.idx].right_idx == right.idx);
+        try expect(isRed(&colours, right_left.idx) == false);
+
+        try expect(nodes.items[right.idx].parent_idx == right_left.idx);
+        try expect(isRed(&colours, right.idx) == false);
+
+        try expect(isRed(&colours, right_left.left_idx) == false);
     }
 }
