@@ -5,18 +5,98 @@ const expect = std.testing.expect;
 const zbench = @import("zbench");
 const NULL_IDX = RBTree.NULL_IDX;
 const MAX_IDX = RBTree.MAX_IDX;
+const Colour = RBTree.Colour;
 
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
+    var tree = try T.initCapacity(allocator, 30);
 
-    var bench = zbench.Benchmark.init(allocator, .{});
+    // var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
+    // const random = PRNG.random();
 
-    defer bench.deinit();
+    // var inputs: [25]u64 = undefined;
 
-    try bench.add("Insertions array list", tree_list, .{ .iterations = 150 });
-    try bench.add("Insertions", rbTree, .{ .iterations = 150 });
+    // for (0..inputs.len) |i| {
+    //     inputs[i] = 5 * i;
+    // }
 
-    try bench.run(std.io.getStdOut().writer());
+    // random.shuffle(u64, &inputs);
+
+    // std.debug.print("inputs for random height checks: {any}\n", .{inputs});
+
+    const inputs = [_]u64{ 0, 5, 10, 15, 20, 25, 30, 35, 40 };
+
+    for (inputs) |key| {
+        try tree.insertAssumeCapacity(.{ .key = key, .value = key * 10 });
+    }
+
+    const root: *RBTree.Node = &tree.nodes.items[tree.root_idx];
+
+    tree.colours.setValue(4, Colour.Red);
+
+    const black_height = verifyRBTreeInvariants(tree, root, 1);
+
+    std.debug.print("Black height: {}\n", .{black_height});
+    // var bench = zbench.Benchmark.init(allocator, .{});
+
+    // defer bench.deinit();
+
+    // try bench.add("Insertions array list", tree_list, .{ .iterations = 150 });
+    // try bench.add("Insertions", rbTree, .{ .iterations = 150 });
+
+    // try bench.run(std.io.getStdOut().writer());
+}
+
+const T = Tree(u64, u64, comp);
+
+pub fn verifyRBTreeInvariants(tree: T, node: *RBTree.Node, start_count: u6) u6 {
+
+    //Ensure the root is black
+    if (node.parent_idx == NULL_IDX) {
+        std.debug.assert(T.isRed(&tree.colours, node.idx));
+    }
+
+    //No red right links
+    const right: ?*RBTree.Node = if (node.right_idx == NULL_IDX) null else &tree.nodes.items[node.right_idx];
+    if (right) |right_node| {
+        if (T.isRed(&tree.colours, right_node.idx)) {
+            std.debug.panic("Red right link found at the node {}\nKey:{}\n", .{ node, tree.keys.items[node.idx] });
+        }
+    }
+
+    //No double red left links
+    const left: ?*RBTree.Node = if (node.left_idx == NULL_IDX) null else &tree.nodes.items[node.left_idx];
+    double_left_red_check: {
+        const left_node = left orelse break :double_left_red_check;
+        if (!T.isRed(&tree.colours, left_node.idx)) break :double_left_red_check;
+
+        if (left_node.left_idx != NULL_IDX and T.isRed(&tree.colours, left_node.left_idx)) {
+            std.debug.panic("Double red left links found at the node {}\nKey:{}\n", .{ node, tree.keys.items[node.idx] });
+        }
+    }
+
+    //The number of black nodes on the path from the root to any leaf node is the same for all leaf nodes
+    const returned_right_count = blk: {
+        var right_count = start_count;
+        const right_node = right orelse break :blk right_count;
+        if (!T.isRed(&tree.colours, right_node.idx)) {
+            right_count += 1;
+        }
+        break :blk verifyRBTreeInvariants(tree, right_node, right_count);
+    };
+
+    const returned_left_count: u6 = blk: {
+        var left_count = start_count;
+        const left_node = left orelse break :blk left_count;
+
+        if (!T.isRed(&tree.colours, left_node.idx)) {
+            left_count += 1;
+        }
+        break :blk verifyRBTreeInvariants(tree, left_node, left_count);
+    };
+
+    if (returned_left_count != returned_right_count) std.debug.panic("Different tree heights at the node: {}\nKey:{}", .{ node, tree.keys.items[node.idx] });
+    return returned_left_count;
 }
 
 fn comp(a: u64, b: u64) std.math.Order {

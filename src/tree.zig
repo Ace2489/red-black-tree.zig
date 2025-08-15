@@ -32,10 +32,10 @@ pub fn Tree(
         pub const Value = V;
         pub const KV = struct { key: K, value: V };
 
-        const Keys = std.ArrayListUnmanaged(K);
-        const Values = std.ArrayListUnmanaged(V);
-        const Nodes = std.ArrayListUnmanaged(Node);
-        const Colours = std.DynamicBitSetUnmanaged;
+        pub const Keys = std.ArrayListUnmanaged(K);
+        pub const Values = std.ArrayListUnmanaged(V);
+        pub const Nodes = std.ArrayListUnmanaged(Node);
+        pub const Colours = std.DynamicBitSetUnmanaged;
 
         pub const cmp_fn = compare_fn;
         const Self = @This();
@@ -365,7 +365,7 @@ pub fn Tree(
 
         ///This method assumes there is a node to delete
         ///
-        /// Make sure to verify that the node exists with a search first before calling this
+        ///Make sure to verify that the node exists with a search first before calling this
         // pub fn deleteNode(nodes: []Node, colours: *Colours, keys: []const Key, start_idx: u32, key: K) u32 {
         //     assert(start_idx != NULL_IDX);
         //     var cmp = cmp_fn(key, keys[start_idx]);
@@ -741,7 +741,7 @@ pub fn Tree(
             return left_child_idx;
         }
 
-        pub inline fn isRed(colours: *Colours, idx: u32) bool {
+        pub inline fn isRed(colours: *const Colours, idx: u32) bool {
             assert(idx != NULL_IDX);
             return !colours.isSet(idx);
         }
