@@ -541,7 +541,11 @@ pub fn Tree(
 
             var successor_idx: u32 = NULL_IDX;
 
-            node.right_idx = removeSuccessorNode(nodes, node.right_idx, &successor_idx);
+            node.right_idx = removeSuccessorNode(nodes, colours, node.right_idx, &successor_idx);
+            if(node.right_idx != NULL_IDX){
+                const right = &nodes[node.right_idx];
+                assert(right.parent_idx == node.idx);
+            }
 
             assert(successor_idx != NULL_IDX);
 
@@ -558,11 +562,13 @@ pub fn Tree(
 
             if (node.right_idx != NULL_IDX) {
                 const right = &nodes[node.right_idx];
+                assert(right.parent_idx == node.idx);
                 right.parent_idx = replacement_node.idx;
             }
 
             if (node.left_idx != NULL_IDX) {
                 const left = &nodes[node.left_idx];
+                assert(left.parent_idx == node.idx);
                 left.parent_idx = replacement_node.idx;
             }
 
@@ -1389,6 +1395,13 @@ test "removeSuccessorNode" {
     var tree = try T.initCapacity(allocator, 17);
     defer tree.deinit(allocator);
 
+    const isRed = T.isRed;
+
+    var nodes = try T.Nodes.initCapacity(allocator, 10);
+    var colours = try T.Colours.initFull(allocator, 10); //Sets all nodes to black;
+    defer nodes.deinit(allocator);
+    defer colours.deinit(allocator);
+
     //With left_idx and moveLeftRed
     {
         for (0..7) |i| {
@@ -1397,16 +1410,13 @@ test "removeSuccessorNode" {
 
         var index_ptr: u32 = NULL_IDX;
 
-        // const keys = [_]u6{ 15, 5, 25, 0, 10, 5, 30 };
-        // nodes.appendSliceAssumeCapacity(([_]Node{ root, left, right, left_left, left_right, right_left, right_right })[0..]);
-
         const new_root_idx = T.removeSuccessorNode(tree.nodes.items, &tree.colours, tree.root_idx, &index_ptr);
         // for (tree.nodes.items) |node| {
         //     std.debug.print("\nNode:{}\nKey:{}. isRed:{}\n", .{ node, tree.keys.items[node.idx], T.isRed(&tree.colours, node.idx) });
         // }
         try expect(index_ptr == 0);
         try expect(tree.keys.items[new_root_idx] == 25);
-        try expect(T.isRed(&tree.colours, new_root_idx) == true);
+        try expect(isRed(&tree.colours, new_root_idx) == true);
 
         const new_root_left_idx = 3;
         const successor_parent_idx = 1;
@@ -1414,4 +1424,74 @@ test "removeSuccessorNode" {
         try expect(tree.nodes.items[new_root_idx].left_idx == new_root_left_idx);
         try expect(tree.nodes.items[successor_parent_idx].left_idx == NULL_IDX);
     }
+
+    //With moveLeftRed and no left child
+    {
+        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = 2, .parent_idx = NULL_IDX };
+        const left = Node{ .idx = 1, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root.idx };
+        const right = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root.idx };
+        nodes.appendSliceAssumeCapacity(&[_]Node{ root, left, right });
+
+        var index_ptr: u32 = NULL_IDX;
+        const new_root_idx = T.removeSuccessorNode(nodes.items, &colours, root.idx, &index_ptr);
+
+        try expect(new_root_idx == 2);
+        try expect(index_ptr == 1);
+
+        try expect(isRed(&colours, new_root_idx) == true);
+    }
+
+    //Without moveLeftRed
+    {
+        nodes.clearRetainingCapacity();
+        colours.setAll();
+
+        const root = Node{ .idx = 0, .left_idx = 1, .right_idx = 2, .parent_idx = NULL_IDX };
+        const left = Node{ .idx = 1, .left_idx = 3, .right_idx = NULL_IDX, .parent_idx = root.idx };
+        const right = Node{ .idx = 2, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = root.idx };
+        const left_left = Node{ .idx = 3, .left_idx = NULL_IDX, .right_idx = NULL_IDX, .parent_idx = left.idx };
+
+        nodes.appendSliceAssumeCapacity(&[_]Node{ root, left, right, left_left });
+        colours.setValue(left_left.idx, Colour.Red);
+
+        var index_ptr: u32 = NULL_IDX;
+        const new_root_idx = T.removeSuccessorNode(nodes.items, &colours, root.idx, &index_ptr);
+
+        try expect(new_root_idx == root.idx);
+        try expect(isRed(&colours, root.idx) == false);
+        try expect(isRed(&colours, left.idx) == false);
+        try expect(isRed(&colours, right.idx) == false);
+    }
+}
+
+
+test "replaceWithSuccessor" {
+    const allocator = std.testing.allocator;
+    var tree = try T.initCapacity(allocator, 12);
+    defer tree.deinit(allocator);
+
+    // All conditions
+    for(0..10)|i|{
+        tree.insertAssumeCapacity(.{.key = i*5, .value = i}) catch unreachable;
+    }
+    try expect(tree.keys.items[tree.root_idx] == 15);
+
+    const candidate = &tree.nodes.items[tree.getIdx(35).?];
+
+    const replaced_node = T.replaceWithSuccessor(tree.nodes.items, &tree.colours, candidate);
+
+    try expect(tree.keys.items[replaced_node.idx] == 40);
+
+    const right = tree.nodes.items[replaced_node.left_idx];
+    const left = tree.nodes.items[replaced_node.right_idx];
+    const parent = tree.nodes.items[replaced_node.parent_idx];
+
+    try expect( tree.keys.items[right.idx] == 25);
+    try expect( tree.keys.items[left.idx] == 45);
+    try expect(tree.keys.items[parent.idx] == 15);
+
+    try expect(right.parent_idx == replaced_node.idx);
+    try expect(left.parent_idx == replaced_node.idx);
+    //I know that it's the right_idx
+    try expect(parent.right_idx == replaced_node.idx);
 }
