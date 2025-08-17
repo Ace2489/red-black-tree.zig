@@ -8,21 +8,10 @@ const MAX_IDX = RBTree.MAX_IDX;
 const Colour = RBTree.Colour;
 
 pub fn main() !void {
-    const allocator = std.heap.page_allocator;
+    var debug = std.heap.DebugAllocator(.{}).init;
+    var arena = std.heap.ArenaAllocator.init(debug.allocator());
+    const allocator = arena.allocator();
     var tree = try T.initCapacity(allocator, 30);
-
-    // var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
-    // const random = PRNG.random();
-
-    // var inputs: [25]u64 = undefined;
-
-    // for (0..inputs.len) |i| {
-    //     inputs[i] = 5 * i;
-    // }
-
-    // random.shuffle(u64, &inputs);
-
-    // std.debug.print("inputs for random height checks: {any}\n", .{inputs});
 
     const inputs = [_]u64{ 0, 5, 10, 15, 20, 25, 30, 35, 40 };
 
@@ -32,19 +21,17 @@ pub fn main() !void {
 
     const root: *RBTree.Node = &tree.nodes.items[tree.root_idx];
 
-    tree.colours.setValue(4, Colour.Red);
-
     const black_height = verifyRBTreeInvariants(tree, root, 1);
 
     std.debug.print("Black height: {}\n", .{black_height});
-    // var bench = zbench.Benchmark.init(allocator, .{});
+    var bench = zbench.Benchmark.init(allocator, .{});
 
-    // defer bench.deinit();
+    defer bench.deinit();
 
     // try bench.add("Insertions array list", tree_list, .{ .iterations = 150 });
-    // try bench.add("Insertions", rbTree, .{ .iterations = 150 });
+    try bench.add("Insertions", rbTree, .{ .iterations = 150 });
 
-    // try bench.run(std.io.getStdOut().writer());
+    try bench.run(std.io.getStdOut().writer());
 }
 
 const T = Tree(u64, u64, comp);
@@ -53,7 +40,7 @@ pub fn verifyRBTreeInvariants(tree: T, node: *RBTree.Node, start_count: u6) u6 {
 
     //Ensure the root is black
     if (node.parent_idx == NULL_IDX) {
-        std.debug.assert(T.isRed(&tree.colours, node.idx));
+        std.debug.assert(!T.isRed(&tree.colours, node.idx));
     }
 
     //No red right links
@@ -104,7 +91,7 @@ fn comp(a: u64, b: u64) std.math.Order {
 }
 
 fn rbTree(allocator: std.mem.Allocator) void {
-    const len = NULL_IDX;
+    const len = 200000;
     var tree = Tree(u64, u64, comp).initCapacity(allocator, len) catch unreachable;
     defer tree.deinit(allocator);
     var Xosh = std.Random.Xoshiro256.init(64);
@@ -273,132 +260,143 @@ test "insertion: random inputs" {
 //     std.debug.print("node: {}\nkey: {}\n,IsRed:{}\n\n", .{ i, tree.keys.items[k], !tree.colours.isSet(i.idx) });
 // }
 
-// test "deletion: moveLeftRed on the right subtree twice with no successor subtree" {
-//     const allocator = std.testing.allocator;
+test "deletion: moveLeftRed on the right subtree twice with no successor subtree" {
+    const allocator = std.testing.allocator;
 
-//     const inputs = [_]u64{ 5, 10, 15, 20, 25, 30, 35, 23 };
+    const inputs = [_]u64{ 5, 10, 15, 20, 25, 30, 35, 23 };
 
-//     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
-//     defer tree.deinit(allocator);
+    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
 
-//     for (inputs, 0..) |i, k| {
-//         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
-//     }
+    for (inputs) |i| {
+        tree.insertAssumeCapacity(.{ .key = i, .value = i * 10 }) catch unreachable;
+    }
 
-//     _ = tree.delete(30);
-// }
+    const deleted = tree.delete(30).?;
+    try expect(deleted.key == 30);
+    try expect(deleted.value == 30 * 10);
+    _ = verifyRBTreeInvariants(tree, &tree.nodes.items[tree.root_idx], 1);
+}
 
-// test "deletion: significantly long subtree" {
-//     const allocator = std.testing.allocator;
+test "deletion: significantly long subtree" {
+    const allocator = std.testing.allocator;
 
-//     const inputs = [_]u64{ 10, 30, 5, 15, 25, 35, 2, 7, 12, 17, 23, 27, 32, 37, 31, 33 };
+    const inputs = [_]u64{ 10, 30, 5, 15, 25, 35, 2, 7, 12, 17, 23, 27, 32, 37, 31, 33 };
 
-//     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
-//     defer tree.deinit(allocator);
+    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
 
-//     for (inputs, 0..) |i, k| {
-//         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
-//     }
+    for (inputs) |i| {
+        tree.insertAssumeCapacity(.{ .key = i, .value = i * 10 }) catch unreachable;
+    }
 
-//     _ = tree.delete(30);
-//     _ = tree.delete(10);
+    for (inputs) |i| {
+        try expect(tree.get(i).? == i * 10);
+        const del = tree.delete(i).?;
+        try expect(del.key == i and del.value == i * 10);
+        if (tree.root_idx == NULL_IDX) break;
+        _ = verifyRBTreeInvariants(tree, &tree.nodes.items[tree.root_idx], 0);
+    }
+}
 
-//     try expect(tree.get(10).? == 10 * 10);
+test "deletion (right): successive deletions to test right subtree successor replacements" {
+    const allocator = std.testing.allocator;
+    const seed = std.time.nanoTimestamp(); //1755449775663246750;
+    var PRNG = std.Random.Xoshiro256.init(@intCast(seed));
+    const random = PRNG.random();
 
-//     for (inputs[2..]) |i| {
-//         try expect(tree.get(i).? == i * 10);
-//     }
-// }
+    var inputs: [25]u64 = undefined;
 
-// test "deletion (right): successive deletions to test right subtree successor replacements" {
-//     const allocator = std.testing.allocator;
-//     var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
-//     const random = PRNG.random();
+    for (0..inputs.len) |i| {
+        inputs[i] = 5 * i;
+    }
 
-//     var inputs: [15]u64 = undefined;
+    random.shuffle(u64, &inputs);
+    std.debug.print("\nSeed for random right deletion: {any}\n", .{seed});
+    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
 
-//     for (0..inputs.len) |i| {
-//         inputs[i] = 5 * i;
-//     }
+    for (inputs, 0..) |i, k| {
+        tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
+    }
 
-//     random.shuffle(u64, &inputs);
-//     // _ = random;
-//     // _ = &inputs;
-//     std.debug.print("inputs for random right deletion: {any}\n", .{inputs});
-//     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
-//     defer tree.deinit(allocator);
+    var root = &tree.nodes.items[tree.root_idx];
+    while (root.right_idx != NULL_IDX) {
+        const deleted = tree.delete(tree.keys.items[root.right_idx]).?;
+        _ = deleted;
+        // std.debug.print("Verifying invariants after deleting right {}\n", .{deleted.key});
+        _ = verifyRBTreeInvariants(tree, &tree.nodes.items[tree.root_idx], 1);
+        root = &tree.nodes.items[tree.root_idx];
+    }
+}
 
-//     for (inputs, 0..) |i, k| {
-//         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
-//     }
+test "deletion: (root):  successor replacements and rebalancing" {
+    const allocator = std.testing.allocator;
 
-//     var root = &tree.nodes.items[tree.root_idx];
-//     while (root.right_idx != NULL_IDX) {
-//         _ = tree.delete(tree.keys.items[root.right_idx]);
-//         root = &tree.nodes.items[tree.root_idx];
-//     }
-// }
+    const seed = std.time.nanoTimestamp();
+    var PRNG = std.Random.Xoshiro256.init(@intCast(seed));
+    const random = PRNG.random();
 
-// test "deletion: (root):  successor replacements and rebalancing" {
-//     const allocator = std.testing.allocator;
+    var inputs: [25]u64 = undefined;
 
-//     var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
-//     const random = PRNG.random();
+    for (0..inputs.len) |i| {
+        inputs[i] = 5 * i;
+    }
 
-//     var inputs: [15]u64 = undefined;
+    random.shuffle(u64, &inputs);
 
-//     for (0..inputs.len) |i| {
-//         inputs[i] = 5 * i;
-//     }
+    std.debug.print("\nSeed for random root deletion: {any}\n", .{seed});
+    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
 
-//     random.shuffle(u64, &inputs);
-//     // _ = random;
-//     // _ = &inputs;
-//     std.debug.print("inputs for random root deletion: {any}\n", .{inputs});
-//     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
-//     defer tree.deinit(allocator);
+    for (inputs, 0..) |i, k| {
+        tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
+    }
 
-//     for (inputs, 0..) |i, k| {
-//         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
-//     }
+    for (0..tree.nodes.items.len - 3) |_| {
+        const deleted = tree.delete(tree.keys.items[tree.root_idx]).?;
+        _ = deleted;
+        // std.debug.print("Verifying invariants after deleting root {}\n", .{deleted.key});
+        _ = verifyRBTreeInvariants(tree, &tree.nodes.items[tree.root_idx], 1);
+    }
+}
 
-//     for (0..tree.nodes.items.len - 3) |_| {
-//         _ = tree.delete(tree.keys.items[tree.root_idx]);
-//     }
-// }
+test "deletion (left): successor deletions to test rebalancing" {
+    const allocator = std.testing.allocator;
 
-// test "deletion (left): successor deletions to test and rebalancing" {
-//     const allocator = std.testing.allocator;
+    const seed = std.time.nanoTimestamp();
+    var PRNG = std.Random.Xoshiro256.init(@intCast(seed));
+    const random = PRNG.random();
 
-//     var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
-//     const random = PRNG.random();
+    var inputs: [25]u64 = undefined;
 
-//     var inputs: [15]u64 = undefined;
+    for (0..inputs.len) |i| {
+        inputs[i] = 5 * i;
+    }
 
-//     for (0..inputs.len) |i| {
-//         inputs[i] = 5 * i;
-//     }
+    random.shuffle(u64, &inputs);
+    std.debug.print("\nSeed for random left deletion: {any}\n", .{seed});
+    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
 
-//     random.shuffle(u64, &inputs);
-//     // _ = &inputs;
-//     // _ = random;
-//     std.debug.print("inputs for random left deletion: {any}\n", .{inputs});
-//     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
-//     defer tree.deinit(allocator);
+    for (inputs, 0..) |i, k| {
+        tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
+    }
 
-//     for (inputs, 0..) |i, k| {
-//         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
-//     }
+    var root = &tree.nodes.items[tree.root_idx];
+    while (root.left_idx != NULL_IDX) {
+        const deleted = tree.delete(tree.keys.items[root.left_idx]).?;
+        _ = deleted;
+        // std.debug.print("Verifying invariants after deleting left{}\n", .{deleted.key});
 
-//     var root = &tree.nodes.items[tree.root_idx];
-//     while (root.left_idx != NULL_IDX) {
-//         _ = tree.delete(tree.keys.items[root.left_idx]);
+        // for (tree.nodes.items) |node| {
+        //     std.debug.print("Node: {}\nKey:{}. isRed:{}\n", .{ node, tree.keys.items[node.idx], T.isRed(&tree.colours, node.idx) });
+        // }
 
-//         root = &tree.nodes.items[tree.root_idx];
-//     }
-
-//     tree.insertAssumeCapacity(.{ .key = 45, .value = 10 }) catch unreachable;
-// }
+        root = &tree.nodes.items[tree.root_idx];
+        _ = verifyRBTreeInvariants(tree, &tree.nodes.items[tree.root_idx], 0);
+    }
+}
 
 // test "deletion (children): leaf deletion" {
 //     const allocator = std.testing.allocator;
@@ -438,3 +436,37 @@ test "insertion: random inputs" {
 //         }
 //     }
 // }
+
+test "deletion: random deletion" {
+    const allocator = std.testing.allocator;
+    const seed = std.time.nanoTimestamp();
+    var PRNG = std.Random.Xoshiro256.init(@intCast(seed));
+    const random = PRNG.random();
+
+    var inputs: [1_000_000]u64 = undefined;
+
+    for (0..inputs.len) |i| {
+        inputs[i] = 5 * i;
+    }
+
+    random.shuffle(u64, &inputs);
+    std.debug.print("\nSeed for random deletion: {any}\n", .{seed});
+    var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
+
+    for (inputs) |i| {
+        tree.insertAssumeCapacity(.{ .key = i, .value = i * 10 }) catch unreachable;
+    }
+
+    for (inputs) |i| {
+        const deleted = tree.delete(i).?;
+        _ = deleted;
+        // std.debug.print("Verifying invariants after deleting left {}\n", .{deleted.key});
+
+        // for (tree.nodes.items) |node| {
+        //     std.debug.print("Node: {}\nKey:{}. isRed:{}\n", .{ node, tree.keys.items[node.idx], T.isRed(&tree.colours, node.idx) });
+        // }
+        if (tree.root_idx == NULL_IDX and tree.nodes.items.len == 0) break;
+        _ = verifyRBTreeInvariants(tree, &tree.nodes.items[tree.root_idx], 0);
+    }
+}

@@ -134,7 +134,7 @@ pub fn Tree(
 
             if (branch.* == NULL_IDX) {
                 const new_idx: u32 = @truncate(self.keys.items.len); //could be any of the lists, really - they're all  the same length
-                assert(new_idx < 0xFFFFFFFF); //maximum addressable element for a u32 index
+                assert(new_idx < MAX_IDX); //maximum addressable element for a u32 index
 
                 self.keys.appendAssumeCapacity(kv.key);
                 self.values.appendAssumeCapacity(kv.value);
@@ -261,55 +261,63 @@ pub fn Tree(
             return null;
         }
 
-        // pub fn delete(self: *Self, key: K) ?KV {
-        //     const removed_idx = self.getIdx(key) orelse return null;
+        pub fn delete(self: *Self, key: K) ?KV {
+            const removed_idx = self.getIdx(key) orelse return null;
 
-        //     assert(self.root_idx != NULL_IDX);
+            assert(self.root_idx != NULL_IDX);
 
-        //     self.root_idx = deleteNode(self.nodes.items, self.keys.items, self.root_idx, key);
+            self.root_idx = deleteNode(self.nodes.items, &self.colours, self.keys.items, self.root_idx, key);
 
-        //     _ = self.nodes.swapRemove(removed_idx);
-        //     const removed_key = self.keys.swapRemove(removed_idx);
-        //     const removed_value = self.values.swapRemove(removed_idx);
+            _ = self.nodes.swapRemove(removed_idx);
+            const removed_key = self.keys.swapRemove(removed_idx);
+            const removed_value = self.values.swapRemove(removed_idx);
+            assert(removed_key == key);
 
-        //     assert(removed_key == key);
+            if (removed_idx == self.nodes.items.len) { //The removed index was the last in the list, there's no need to re-arrange the elements
+                self.colours.unset(self.colours.bit_length - 1);
+                self.colours.bit_length -= 1;
+                return .{ .key = removed_key, .value = removed_value };
+            }
 
-        //     if (removed_idx == self.nodes.items.len) { //The removed index was the last in the list, there's no need to re-arrange the elements
-        //         return .{ .key = removed_key, .value = removed_value };
-        //     }
+            const swapped_node = &self.nodes.items[removed_idx];
+            swapped_node.idx = removed_idx;
 
-        //     var swapped_node = &self.nodes.items[removed_idx];
+            const last_colour_idx = self.colours.bit_length - 1;
+            const swapped_node_colour = self.colours.isSet(last_colour_idx);
 
-        //     swapped_node.idx = removed_idx;
+            //essentially swapRemove for the colours bitset
+            self.colours.setValue(removed_idx, swapped_node_colour);
+            self.colours.unset(last_colour_idx);
+            self.colours.bit_length -= 1;
 
-        //     //Re-linking parent and child nodes
+            //Re-linking parent and child nodes
+            if (swapped_node.left_idx != NULL_IDX) {
+                var left = &self.nodes.items[swapped_node.left_idx];
+                assert(left.parent_idx == self.nodes.items.len);
+                left.parent_idx = removed_idx;
+            }
+            if (swapped_node.right_idx != NULL_IDX) {
+                var right = &self.nodes.items[swapped_node.right_idx];
+                assert(right.parent_idx == self.nodes.items.len);
+                right.parent_idx = removed_idx;
+            }
 
-        //     if (swapped_node.left_idx != NULL_IDX) {
-        //         var left = &self.nodes.items[swapped_node.left_idx];
+            if (swapped_node.parent_idx != NULL_IDX) {
+                var parent = &self.nodes.items[swapped_node.parent_idx];
+                switch (cmp_fn(self.keys.items[swapped_node.idx], self.keys.items[parent.idx])) {
+                    .lt => parent.left_idx = swapped_node.idx,
+                    .gt => parent.right_idx = swapped_node.idx,
+                    .eq => unreachable,
+                }
+            }
 
-        //         left.parent_idx = removed_idx;
-        //     }
-        //     if (swapped_node.right_idx != NULL_IDX) {
-        //         var right = &self.nodes.items[swapped_node.right_idx];
-        //         right.parent_idx = removed_idx;
-        //     }
+            if (self.root_idx == self.nodes.items.len) {
+                self.root_idx = removed_idx;
+            }
 
-        //     if (swapped_node.parent_idx != NULL_IDX) {
-        //         var parent = &self.nodes.items[swapped_node.parent_idx];
-        //         switch (cmp_fn(self.keys.items[swapped_node.idx], self.keys.items[parent.idx])) {
-        //             .lt => parent.left_idx = swapped_node.idx,
-        //             .gt => parent.right_idx = swapped_node.idx,
-        //             .eq => unreachable,
-        //         }
-        //     }
-
-        //     if (self.root_idx == self.nodes.items.len) {
-        //         self.root_idx = removed_idx;
-        //     }
-
-        //     assert(self.root_idx != NULL_IDX);
-        //     return .{ .key = removed_key, .value = removed_value };
-        // }
+            assert(self.root_idx != NULL_IDX);
+            return .{ .key = removed_key, .value = removed_value };
+        }
 
         pub fn range(self: *Self, min: K, max: K, out_buffer: []K) u32 {
             if (self.root_idx == NULL_IDX) return 0;
@@ -369,19 +377,16 @@ pub fn Tree(
         pub fn deleteNode(nodes: []Node, colours: *Colours, keys: []const Key, start_idx: u32, key: K) u32 {
             assert(start_idx != NULL_IDX);
             var cmp = cmp_fn(key, keys[start_idx]);
-            // std.debug.print("\n\nDeleteNode called for {} at {}\n", .{ key, keys[start_idx] });
 
             if (cmp == .lt) {
                 var node = &nodes[start_idx];
                 assert(node.left_idx != NULL_IDX);
 
                 const move_left_red = blk: {
-                    // if (left.colour == .Red) break :blk false;
                     if (isRed(colours, node.left_idx)) break :blk false;
                     const left = &nodes[node.left_idx];
 
                     //This will short-circuit and return true without trying the second one if the first condition is met. Neat!
-                    // break :blk left.left_idx == NULL_IDX or (&nodes[left.left_idx]).colour == .Black;
                     break :blk left.left_idx == NULL_IDX or !isRed(colours, left.left_idx);
                 };
 
@@ -392,7 +397,7 @@ pub fn Tree(
                 }
 
                 node.left_idx = deleteNode(nodes, colours, keys, node.left_idx, key);
-                //
+
                 if (node.left_idx != NULL_IDX) {
                     const left = &nodes[node.left_idx];
                     left.parent_idx = node.idx;
@@ -402,13 +407,12 @@ pub fn Tree(
                 node = &nodes[node_idx];
                 if (node.parent_idx == NULL_IDX) {
                     // node.colour = .Black;
-                    colours.setValue(node.idx, Colour.Red);
+                    colours.setValue(node.idx, Colour.Black);
                 }
                 return node.idx;
             }
 
             var node = &nodes[start_idx];
-            // const rotate_right = node.left_idx != NULL_IDX and (&nodes[node.left_idx]).colour == .Red;
             const rotate_right = node.left_idx != NULL_IDX and isRed(colours, node.left_idx);
             if (rotate_right) {
                 const subtree_head = rotateRight(nodes, colours, node, false);
@@ -426,15 +430,14 @@ pub fn Tree(
 
             const move_right_red = blk: {
                 if (node.right_idx == NULL_IDX) break :blk true;
-                // if (right.colour == .Red) break :blk false;
                 if (isRed(colours, node.right_idx)) break :blk false;
+
                 const right = &nodes[node.right_idx];
-                // break :blk right.left_idx == NULL_IDX or (&nodes[right.left_idx]).colour == .Black;
                 break :blk right.left_idx == NULL_IDX or !isRed(colours, right.left_idx);
             };
 
             if (move_right_red) {
-                colourFlip(colours, nodes, node, false);
+                colourFlip(colours, node, false);
                 const left_left_red = blk: {
                     if (node.left_idx == NULL_IDX) break :blk false;
                     const left = &nodes[node.left_idx];
@@ -446,7 +449,7 @@ pub fn Tree(
                     const node_idx = rotateRight(nodes, colours, node, false);
                     assert(node_idx != NULL_IDX);
                     node = &nodes[node_idx];
-                    colourFlip(colours, nodes, node, false);
+                    colourFlip(colours, node, false);
                 }
             }
 
@@ -456,31 +459,6 @@ pub fn Tree(
                 const node_idx = fixUp(nodes, colours, node.idx);
                 assert(node_idx != NULL_IDX);
                 node = &nodes[node_idx];
-
-                colourFlip(nodes, colours, node, false);
-
-                const right_left_red = blk: {
-                    if (node.right_idx == NULL_IDX) break :blk false;
-                    const right = &nodes[node.right_idx];
-                    // break :blk right.left_idx != NULL_IDX and (&nodes[right.left_idx]).colour == .Red;
-                    break :blk right.left_idx != NULL_IDX and isRed(colours, right.left_idx);
-                };
-
-                if (right_left_red) {
-                    var right_node = &nodes[node.right_idx];
-                    const right_idx = rotateRight(nodes, colours, right_node, false);
-                    assert(right_idx != NULL_IDX);
-
-                    //todo: shouldn't this have already been done by the rotateRight function?
-                    node.right_idx = right_idx;
-                    right_node = &nodes[node.right_idx];
-                    right_node.parent_idx = node.idx;
-
-                    const subtree_root = rotateLeft(nodes, colours, node, false);
-                    assert(subtree_root != NULL_IDX);
-                    node = &nodes[subtree_root];
-                    colourFlip(nodes, colours, node, false);
-                }
 
                 if (node.parent_idx == NULL_IDX) {
                     // node.colour = .Black;
@@ -499,7 +477,6 @@ pub fn Tree(
             assert(node_idx != NULL_IDX);
             node = &nodes[node_idx];
             if (node.parent_idx == NULL_IDX) {
-                // node.colour = .Black;
                 colours.setValue(node.idx, Colour.Black);
             }
 
@@ -542,7 +519,7 @@ pub fn Tree(
             var successor_idx: u32 = NULL_IDX;
 
             node.right_idx = removeSuccessorNode(nodes, colours, node.right_idx, &successor_idx);
-            if(node.right_idx != NULL_IDX){
+            if (node.right_idx != NULL_IDX) {
                 const right = &nodes[node.right_idx];
                 assert(right.parent_idx == node.idx);
             }
@@ -554,12 +531,10 @@ pub fn Tree(
             replacement_node.left_idx = node.left_idx;
             replacement_node.right_idx = node.right_idx;
             replacement_node.parent_idx = node.parent_idx;
-            // replacement_node.colour = node.colour;
             colours.setValue(replacement_node.idx, colours.isSet(node.idx));
             //can't I just do node.key_idx = replacement_node.key_idx here?
 
             //set node's parent and children's parent pointers to the new replacement node
-
             if (node.right_idx != NULL_IDX) {
                 const right = &nodes[node.right_idx];
                 assert(right.parent_idx == node.idx);
@@ -585,7 +560,7 @@ pub fn Tree(
                 }
             }
 
-            @memset(node[0..1], undefined); //Make sure to trigger an error if this is used elsewhere
+            @memset(node[0..1], undefined); //Make sure to trigger an error if this deleted node is used elsewhere
 
             return replacement_node;
         }
@@ -594,7 +569,7 @@ pub fn Tree(
             nodes: []Node,
             colours: *Colours,
             start_idx: u32,
-            ///An index variable which will be populated with the deleted node's index
+            ///An index variable which will be populated with the successor node's index
             index_ptr: *u32,
         ) u32 {
             var node = &nodes[start_idx];
@@ -603,10 +578,9 @@ pub fn Tree(
                 return NULL_IDX;
             }
             const move_left_red = blk: {
-                // if (left.colour == .Red) break :blk false;
                 if (isRed(colours, node.left_idx)) break :blk false;
                 const left = &nodes[node.left_idx];
-                // break :blk left.left_idx == NULL_IDX or (&nodes[left.left_idx]).colour == .Black;
+                assert(left.parent_idx == node.idx);
                 break :blk left.left_idx == NULL_IDX or !isRed(colours, left.left_idx);
             };
             if (move_left_red) {
@@ -617,10 +591,9 @@ pub fn Tree(
 
             node.left_idx = removeSuccessorNode(nodes, colours, node.left_idx, index_ptr);
 
-            //todo: This might be redundant. Do more testing to confirm
             if (node.left_idx != NULL_IDX) {
                 const left = &nodes[node.left_idx];
-                left.parent_idx = node.idx;
+                assert(left.parent_idx == node.idx);
             }
 
             const balanced_idx = fixUp(nodes, colours, node.idx);
@@ -640,7 +613,6 @@ pub fn Tree(
                 const can_flip = blk: {
                     if (parent_node.left_idx == NULL_IDX or parent_node.right_idx == NULL_IDX) break :blk false;
                     break :blk isRed(colours, parent_node.left_idx) and isRed(colours, parent_node.right_idx);
-                    // break :blk (&nodes[parent_node.left_idx]).colour == .Red and (&nodes[parent_node.right_idx]).colour == .Red;
                 };
 
                 if (can_flip) {
@@ -652,7 +624,6 @@ pub fn Tree(
             var parent_node = &nodes[parent_idx];
             const hanging_right_link = blk: {
                 if (parent_node.right_idx == NULL_IDX) break :blk false;
-                // break :blk (&nodes[parent_node.right_idx]).colour == .Red;
                 break :blk isRed(colours, parent_node.right_idx);
             };
 
@@ -662,7 +633,6 @@ pub fn Tree(
                 parent_node = &nodes[new_parent_idx];
                 const can_flip = blk: {
                     if (parent_node.right_idx == NULL_IDX) break :blk false;
-                    // break :blk left.colour == .Red and (&nodes[parent_node.right_idx]).colour == .Red;
 
                     //Because we just rotated left, we are guaranteed to have a left child
                     break :blk isRed(colours, parent_node.left_idx) and isRed(colours, parent_node.right_idx);
@@ -674,11 +644,9 @@ pub fn Tree(
 
             const double_left_red = blk: {
                 if (parent_node.left_idx == NULL_IDX) break :blk false;
-                // if (left.colour != .Red) break :blk false;
                 if (!isRed(colours, parent_node.left_idx)) break :blk false;
 
                 const left = &nodes[parent_node.left_idx];
-                // break :blk left.left_idx != NULL_IDX and (&nodes[left.left_idx]).colour == .Red;
                 break :blk left.left_idx != NULL_IDX and isRed(colours, left.left_idx);
             };
 
@@ -713,6 +681,7 @@ pub fn Tree(
             const node_idx = node.idx; //All the lists maintain a direct mapping between each other, allowing us to index one with the index of another
             const right_child_idx = node.right_idx;
             const right_child = &nodes[right_child_idx];
+            assert(right_child.parent_idx == node.idx);
 
             const node_colour = colours.isSet(node.idx);
             const right_colour = colours.isSet(right_child_idx);
@@ -753,10 +722,10 @@ pub fn Tree(
             const node_idx = node.idx;
             const left_child_idx = node.left_idx;
             const left_child = &nodes[left_child_idx];
+            assert(left_child.parent_idx == node.idx);
 
             if (safety_checks_for_insertion) {
                 assert(isRed(colours, left_child_idx));
-                // assert(left_child.colour == .Red);
             }
 
             const node_colour = colours.isSet(node_idx);
@@ -764,8 +733,6 @@ pub fn Tree(
 
             colours.setValue(node_idx, left_child_colour);
             colours.setValue(left_child_idx, node_colour);
-            // node.colour = left_child_colour;
-            // left_child.colour = node_colour;
 
             left_child.parent_idx = node.parent_idx;
             if (node.parent_idx != NULL_IDX) {
@@ -1464,15 +1431,14 @@ test "removeSuccessorNode" {
     }
 }
 
-
 test "replaceWithSuccessor" {
     const allocator = std.testing.allocator;
     var tree = try T.initCapacity(allocator, 12);
     defer tree.deinit(allocator);
 
     // All conditions
-    for(0..10)|i|{
-        tree.insertAssumeCapacity(.{.key = i*5, .value = i}) catch unreachable;
+    for (0..10) |i| {
+        tree.insertAssumeCapacity(.{ .key = i * 5, .value = i }) catch unreachable;
     }
     try expect(tree.keys.items[tree.root_idx] == 15);
 
@@ -1486,8 +1452,8 @@ test "replaceWithSuccessor" {
     const left = tree.nodes.items[replaced_node.right_idx];
     const parent = tree.nodes.items[replaced_node.parent_idx];
 
-    try expect( tree.keys.items[right.idx] == 25);
-    try expect( tree.keys.items[left.idx] == 45);
+    try expect(tree.keys.items[right.idx] == 25);
+    try expect(tree.keys.items[left.idx] == 45);
     try expect(tree.keys.items[parent.idx] == 15);
 
     try expect(right.parent_idx == replaced_node.idx);
