@@ -95,7 +95,7 @@ pub fn Tree(
             assert(self.nodes.items.len <= self.nodes.capacity - 1);
             assert(self.values.items.len <= self.values.capacity - 1);
             assert(self.nodes.items.len == self.keys.items.len and self.nodes.items.len == self.values.items.len);
-            assert(self.colours.capacity() >= self.nodes.items.len + 1);
+            assert(self.colours.capacity() > self.nodes.items.len);
 
             if (self.nodes.items.len == MAX_IDX) return error.FullTree;
 
@@ -112,7 +112,7 @@ pub fn Tree(
             assert(self.keys.items.len <= self.keys.capacity - 1);
             assert(self.nodes.items.len <= self.nodes.capacity - 1);
             assert(self.values.items.len <= self.values.capacity - 1);
-            assert(self.colours.capacity() >= self.nodes.items.len + 1);
+            assert(self.colours.capacity() > self.nodes.items.len);
             assert(self.nodes.items.len == self.keys.items.len and self.nodes.items.len == self.values.items.len);
 
             const self_key = self.keys.items[node.idx];
@@ -259,27 +259,25 @@ pub fn Tree(
 
             self.root_idx = deleteNode(self.nodes.items, &self.colours, self.keys.items, self.root_idx, key);
 
+            const last_colour_idx = self.nodes.items.len - 1;
             _ = self.nodes.swapRemove(removed_idx);
             const removed_key = self.keys.swapRemove(removed_idx);
             const removed_value = self.values.swapRemove(removed_idx);
             assert(cmp_fn(removed_key, key) == .eq);
 
             if (removed_idx == self.nodes.items.len) { //The removed index was the last in the list, there's no need to re-arrange the elements
-                self.colours.unset(self.colours.bit_length - 1);
-                self.colours.bit_length -= 1;
+                self.colours.unset(last_colour_idx);
                 return .{ .key = removed_key, .value = removed_value };
             }
 
             const swapped_node = &self.nodes.items[removed_idx];
             swapped_node.idx = removed_idx;
 
-            const last_colour_idx = self.colours.bit_length - 1;
             const swapped_node_colour = self.colours.isSet(last_colour_idx);
 
             //essentially swapRemove for the colours bitset
             self.colours.setValue(removed_idx, swapped_node_colour);
             self.colours.unset(last_colour_idx);
-            self.colours.bit_length -= 1;
 
             //Re-linking parent and child nodes
             if (swapped_node.left_idx != NULL_IDX) {

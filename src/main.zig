@@ -10,17 +10,21 @@ const Colour = RBTree.Colour;
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     const allocator = arena.allocator();
-    var tree = try T.initCapacity(allocator, 30);
 
     const inputs = [_]u64{ 0, 5, 10, 15, 20, 25, 30, 35, 40 };
 
+    var tree = try T.initCapacity(allocator, inputs.len);
     for (inputs) |key| {
         try tree.insertAssumeCapacity(.{ .key = key, .value = key * 10 });
     }
 
-    const root: *RBTree.Node = &tree.nodes.items[tree.root_idx];
-
-    _ = verifyRBTreeInvariants(tree, root, 1);
+    for (inputs[0..2]) |i| {
+        _ = tree.delete(i);
+        if (tree.root_idx == NULL_IDX) break;
+        const root: *RBTree.Node = &tree.nodes.items[tree.root_idx];
+        _ = verifyRBTreeInvariants(tree, root, 1);
+    }
+    // try tree.insertAssumeCapacity(.{ .key = 5, .value = 5 * 10 });
 
     var buffer: [10]u64 = undefined;
     const count = tree.range(5, 35, buffer[0..]);
@@ -403,7 +407,7 @@ test "deletion: random deletion" {
     var PRNG = std.Random.Xoshiro256.init(@intCast(seed));
     const random = PRNG.random();
 
-    var inputs: [1_000]u64 = undefined;
+    var inputs: [10_000]u64 = undefined;
 
     for (0..inputs.len) |i| {
         inputs[i] = 5 * i;
@@ -423,5 +427,33 @@ test "deletion: random deletion" {
         _ = deleted;
         if (tree.root_idx == NULL_IDX and tree.nodes.items.len == 0) break;
         _ = verifyRBTreeInvariants(tree, &tree.nodes.items[tree.root_idx], 0);
+    }
+}
+
+test "allocations and indexes" {
+
+    //Trust me, this test's important - it's just difficult to explain
+    const allocator = std.testing.allocator;
+
+    const inputs = [_]u64{ 0, 5, 10, 15, 20, 25, 30, 35, 40 };
+
+    var tree = try T.initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
+
+    for (inputs) |key| {
+        try tree.insertAssumeCapacity(.{ .key = key, .value = key * 10 });
+    }
+
+    for (inputs) |i| {
+        _ = tree.delete(i);
+        if (tree.root_idx == NULL_IDX) break;
+        const root: *RBTree.Node = &tree.nodes.items[tree.root_idx];
+        _ = verifyRBTreeInvariants(tree, root, 1);
+    }
+
+    for (inputs) |key| {
+        try tree.insertAssumeCapacity(.{ .key = key, .value = key * 10 });
+        const root: *RBTree.Node = &tree.nodes.items[tree.root_idx];
+        _ = verifyRBTreeInvariants(tree, root, 1);
     }
 }
