@@ -26,14 +26,15 @@ pub fn main() !void {
     const count = tree.range(5, 35, buffer[0..]);
 
     std.debug.print("Count: {}\nelems:{any}\n", .{ count, buffer[0..count] });
-    // var bench = zbench.Benchmark.init(allocator, .{});
 
-    // defer bench.deinit();
+    var bench = zbench.Benchmark.init(allocator, .{});
 
-    // // try bench.add("Insertions array list", tree_list, .{ .iterations = 150 });
-    // try bench.add("Insertions", rbTree, .{ .iterations = 150 });
+    defer bench.deinit();
 
-    // try bench.run(std.io.getStdOut().writer());
+    // try bench.add("Insertions array list", tree_list, .{ .iterations = 150 });
+    try bench.add("Insertions", rbTree, .{ .iterations = 150 });
+
+    try bench.run(std.io.getStdOut().writer());
 }
 
 const T = Tree(u64, u64, comp);
@@ -402,7 +403,7 @@ test "deletion: random deletion" {
     var PRNG = std.Random.Xoshiro256.init(@intCast(seed));
     const random = PRNG.random();
 
-    var inputs: [100_000]u64 = undefined;
+    var inputs: [1_000]u64 = undefined;
 
     for (0..inputs.len) |i| {
         inputs[i] = 5 * i;

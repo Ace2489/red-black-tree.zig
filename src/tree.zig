@@ -1,7 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
-const tracy = @import("tracy");
 
 ///We use indexes instead of pointers for cache locality
 ///
@@ -85,9 +84,6 @@ pub fn Tree(
         }
 
         pub fn insertAssumeCapacity(self: *Self, kv: KV) error{FullTree}!void {
-            const zone = tracy.initZone(@src(), .{ .name = "insert" });
-            defer zone.deinit();
-
             //TODO: check for the max addressable length
             if (self.root_idx == NULL_IDX) {
                 return self.insertRoot(kv);
@@ -118,9 +114,6 @@ pub fn Tree(
             assert(self.values.items.len <= self.values.capacity - 1);
             assert(self.colours.capacity() >= self.nodes.items.len + 1);
             assert(self.nodes.items.len == self.keys.items.len and self.nodes.items.len == self.values.items.len);
-
-            const zone = tracy.initZone(@src(), .{ .name = "insertNode" });
-            defer zone.deinit();
 
             const self_key = self.keys.items[node.idx];
 
@@ -174,8 +167,6 @@ pub fn Tree(
 
         ///We always balance from the perspective of the node's parent, makes things easier to reason about
         pub fn balanceTree(nodes: []Node, colours: *Colours, idx: u32) u32 {
-            const zone = tracy.initZone(@src(), .{ .name = "Balance tree" });
-            defer zone.deinit();
             var parent_idx: u32 = idx;
             assert(parent_idx != NULL_IDX);
             while (true) {

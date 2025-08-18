@@ -17,8 +17,6 @@ pub fn build(b: *std.Build) void {
 
     const opts = .{ .target = target, .optimize = optimize };
 
-    const enable_tracy = b.option(bool, "tracy", "enable tracy profiling for the application") orelse false;
-    const tracy_module = b.dependency("tracy", .{ .target = target, .optimize = optimize, .tracy_enable = enable_tracy }).module("tracy");
     const zbench_module = b.dependency("zbench", opts).module("zbench");
 
     const llrb = b.addModule("llrb", .{ .optimize = .ReleaseSafe });
@@ -32,7 +30,6 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.root_module.addImport("zbench", zbench_module);
-    exe.root_module.addImport("tracy", tracy_module);
 
     b.installArtifact(exe);
 
