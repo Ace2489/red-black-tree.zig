@@ -45,6 +45,32 @@ To see an example of an integration into a bigger project, I used this tree as t
 
 ## Installation
 
+- Add the package to your dependencies:
+```bash
+zig fetch --save git+https://github.com/Ace2489/red-black-tree.zig
+```
+
+* Expose the module to your application in your `build.zig` file:
+
+```bash
+// in your build.zig
+const llrb = b.dependency("llrb");
+exe_mod.addImport("llrb", llrb.module("llrb"));
+  ```
+* Import and use the LLRB tree in your Zig code:
+
+```zig
+// In your Zig source file
+const LLRB = @import("llrb");
+
+pub fn main() void {
+   var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+   const allocator = gpa.allocator();
+
+   const Tree = LLRB.Tree;
+   //More code here
+}
+```
 
 ## Usage
 ### Initialisation
