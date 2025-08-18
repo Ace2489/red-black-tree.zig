@@ -262,7 +262,7 @@ pub fn Tree(
             _ = self.nodes.swapRemove(removed_idx);
             const removed_key = self.keys.swapRemove(removed_idx);
             const removed_value = self.values.swapRemove(removed_idx);
-            assert(removed_key == key);
+            assert(cmp_fn(removed_key, key) == .eq);
 
             if (removed_idx == self.nodes.items.len) { //The removed index was the last in the list, there's no need to re-arrange the elements
                 self.colours.unset(self.colours.bit_length - 1);
