@@ -49,7 +49,7 @@ pub fn comp(a:u64, b:u64) std.math.Order{
 ```
 
 
-The first and second arguments indicate the key and value type for the tree, respectively. The comp function is a user-defined function which takes in two keys and generates the ordering (`lt`, `gt`, `eq`, see [here](https://ziglang.org/documentation/master/std/#std.math.Order)) between them. 
+The first and second arguments indicate the `key` and `value` types for the tree, respectively. The comp function is a user-defined function which takes in two keys and generates the ordering (`lt`, `gt`, `eq`, see [here](https://ziglang.org/documentation/master/std/#std.math.Order)) between them. 
 ```zig
 var tree = T.initCapacity(allocator, 10);
 // or var tree = T.empty;
