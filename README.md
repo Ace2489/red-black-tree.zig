@@ -6,8 +6,8 @@ An implementation of **left‑leaning red–black (LLRB)** trees in Zig.
 - [Overview](#overview)
 - [Installation](#installation)
 - [Usage](#usage)
-- [Architecture](#architecture)
-- [Correctness & Safety](#correctness--safety)
+- [Architecture](#architecture-and-design)
+- [Correctness & Safety](#correctness-and-safety)
 - [Property-Based Testing](#property-based-testing)
 
 ## Why this matters
@@ -37,7 +37,7 @@ These rules, plus standard red–black invariants, simplify code and proofs whil
 * **Search / contains**: `O(log n)` average/worst.
 * **Insert**: `O(log n)` with at most a constant number of rotations per level.
 * **Delete / deleteMin / deleteMax**: `O(log n)`; implemented via top‑down transformations (move‑red‑left/right, rotations, color flips) to avoid post‑recursion fix‑ups.
-* **Ordered ops**: predecessor, successor, min/max, in‑order iteration.
+* **Ordered ops**: Range/filter, min/max, order.
 
 *I recommend this [playlist](https://www.youtube.com/playlist?list=PLnp31xXvnfRrYOYhFXExoXfP8uhHHCIri) by UC Berkeley to fully understand the theory behind this data structure. It's very understandable :)*
 
