@@ -1,6 +1,14 @@
 # red-black-tree.zig
 An implementation of **left‑leaning red–black (LLRB)** trees in Zig.
 
+# Table of Contents
+## Table of Contents
+- [Overview](#overview)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Architecture](#architecture)
+- [Correctness & Safety](#correctness--safety)
+- [Property-Based Testing](#property-based-testing)
 
 ## Why this matters
 
@@ -178,4 +186,4 @@ Another example:
 3. Crashes or assertion failures point directly to structural corruption. 
 
 This approach has already uncovered subtle bugs that would have been very difficult to catch with unit tests alone. 
-```
+
