@@ -8,8 +8,7 @@ const MAX_IDX = RBTree.MAX_IDX;
 const Colour = RBTree.Colour;
 
 pub fn main() !void {
-    var debug = std.heap.DebugAllocator(.{}).init;
-    var arena = std.heap.ArenaAllocator.init(debug.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     const allocator = arena.allocator();
     var tree = try T.initCapacity(allocator, 30);
 
@@ -21,17 +20,20 @@ pub fn main() !void {
 
     const root: *RBTree.Node = &tree.nodes.items[tree.root_idx];
 
-    const black_height = verifyRBTreeInvariants(tree, root, 1);
+    _ = verifyRBTreeInvariants(tree, root, 1);
 
-    std.debug.print("Black height: {}\n", .{black_height});
-    var bench = zbench.Benchmark.init(allocator, .{});
+    var buffer: [10]u64 = undefined;
+    const count = tree.range(5, 35, buffer[0..]);
 
-    defer bench.deinit();
+    std.debug.print("Count: {}\nelems:{any}\n", .{ count, buffer[0..count] });
+    // var bench = zbench.Benchmark.init(allocator, .{});
 
-    // try bench.add("Insertions array list", tree_list, .{ .iterations = 150 });
-    try bench.add("Insertions", rbTree, .{ .iterations = 150 });
+    // defer bench.deinit();
 
-    try bench.run(std.io.getStdOut().writer());
+    // // try bench.add("Insertions array list", tree_list, .{ .iterations = 150 });
+    // try bench.add("Insertions", rbTree, .{ .iterations = 150 });
+
+    // try bench.run(std.io.getStdOut().writer());
 }
 
 const T = Tree(u64, u64, comp);
@@ -256,10 +258,6 @@ test "insertion: random inputs" {
     }
 }
 
-// for (tree.nodes.items, 0..) |i, k| {
-//     std.debug.print("node: {}\nkey: {}\n,IsRed:{}\n\n", .{ i, tree.keys.items[k], !tree.colours.isSet(i.idx) });
-// }
-
 test "deletion: moveLeftRed on the right subtree twice with no successor subtree" {
     const allocator = std.testing.allocator;
 
@@ -398,52 +396,13 @@ test "deletion (left): successor deletions to test rebalancing" {
     }
 }
 
-// test "deletion (children): leaf deletion" {
-//     const allocator = std.testing.allocator;
-
-//     var PRNG = std.Random.Xoshiro256.init(@intCast(std.time.nanoTimestamp()));
-//     const random = PRNG.random();
-
-//     var inputs: [15]u64 = undefined;
-
-//     for (0..inputs.len) |i| {
-//         inputs[i] = 5 * i;
-//     }
-
-//     random.shuffle(u64, &inputs);
-//     _ = &inputs;
-//     std.debug.print("inputs for random left deletion: {any}\n", .{inputs});
-
-//     var tree = try Tree(u64, u64, comp).initCapacity(allocator, inputs.len);
-//     defer tree.deinit(allocator);
-
-//     for (inputs, 0..) |i, k| {
-//         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
-//     }
-
-//     var start_direction: u4 = random.int(u1);
-//     while (tree.root_idx != NULL_IDX) {
-//         const root = &tree.nodes.items[tree.root_idx];
-
-//         switch (start_direction) {
-//             0 => {
-//                 std.debug.print("going left\n", .{});
-//                 if (root.left_idx != NULL_IDX) {
-//                     while(root.key_idx )
-//                     var node = &tree.nodes.items[root.left_idx];
-//                 }
-//             },
-//         }
-//     }
-// }
-
 test "deletion: random deletion" {
     const allocator = std.testing.allocator;
     const seed = std.time.nanoTimestamp();
     var PRNG = std.Random.Xoshiro256.init(@intCast(seed));
     const random = PRNG.random();
 
-    var inputs: [1_000_000]u64 = undefined;
+    var inputs: [100_000]u64 = undefined;
 
     for (0..inputs.len) |i| {
         inputs[i] = 5 * i;
@@ -461,11 +420,6 @@ test "deletion: random deletion" {
     for (inputs) |i| {
         const deleted = tree.delete(i).?;
         _ = deleted;
-        // std.debug.print("Verifying invariants after deleting left {}\n", .{deleted.key});
-
-        // for (tree.nodes.items) |node| {
-        //     std.debug.print("Node: {}\nKey:{}. isRed:{}\n", .{ node, tree.keys.items[node.idx], T.isRed(&tree.colours, node.idx) });
-        // }
         if (tree.root_idx == NULL_IDX and tree.nodes.items.len == 0) break;
         _ = verifyRBTreeInvariants(tree, &tree.nodes.items[tree.root_idx], 0);
     }
