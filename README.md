@@ -1,6 +1,14 @@
 # red-black-tree.zig
 An implementation of **left‑leaning red–black (LLRB)** trees in Zig.
 
+# Table of Contents
+## Table of Contents
+- [Overview](#overview)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Architecture](#architecture-and-design)
+- [Correctness & Safety](#correctness-and-safety)
+- [Property-Based Testing](#property-based-testing)
 
 ## Why this matters
 
@@ -29,7 +37,7 @@ These rules, plus standard red–black invariants, simplify code and proofs whil
 * **Search / contains**: `O(log n)` average/worst.
 * **Insert**: `O(log n)` with at most a constant number of rotations per level.
 * **Delete / deleteMin / deleteMax**: `O(log n)`; implemented via top‑down transformations (move‑red‑left/right, rotations, color flips) to avoid post‑recursion fix‑ups.
-* **Ordered ops**: predecessor, successor, min/max, in‑order iteration.
+* **Ordered ops**: Range/filter, min/max, order.
 
 *I recommend this [playlist](https://www.youtube.com/playlist?list=PLnp31xXvnfRrYOYhFXExoXfP8uhHHCIri) by UC Berkeley to fully understand the theory behind this data structure. It's very understandable :)*
 
@@ -49,7 +57,7 @@ pub fn comp(a:u64, b:u64) std.math.Order{
 ```
 
 
-The first and second arguments indicate the key and value type for the tree, respectively. The comp function is a user-defined function which takes in two keys and generates the ordering (`lt`, `gt`, `eq`, see [here](https://ziglang.org/documentation/master/std/#std.math.Order)) between them. 
+The first and second arguments indicate the `key` and `value` types for the tree, respectively. The comp function is a user-defined function which takes in two keys and generates the ordering (`lt`, `gt`, `eq`, see [here](https://ziglang.org/documentation/master/std/#std.math.Order)) between them. 
 ```zig
 var tree = T.initCapacity(allocator, 10);
 // or var tree = T.empty;
@@ -178,4 +186,4 @@ Another example:
 3. Crashes or assertion failures point directly to structural corruption. 
 
 This approach has already uncovered subtle bugs that would have been very difficult to catch with unit tests alone. 
-```
+
