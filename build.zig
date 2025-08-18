@@ -19,8 +19,11 @@ pub fn build(b: *std.Build) void {
 
     const enable_tracy = b.option(bool, "tracy", "enable tracy profiling for the application") orelse false;
     const tracy_module = b.dependency("tracy", .{ .target = target, .optimize = optimize, .tracy_enable = enable_tracy }).module("tracy");
-
     const zbench_module = b.dependency("zbench", opts).module("zbench");
+
+    const llrb = b.addModule("llrb", .{ .optimize = .ReleaseSafe });
+    llrb.root_source_file = b.path("src/tree.zig");
+
     // This creates another `std.Build.Step.Compile`, but this one builds an executable
     // rather than a static library.
     const exe = b.addExecutable(.{

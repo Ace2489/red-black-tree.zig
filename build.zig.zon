@@ -1,9 +1,9 @@
 .{
-    .name = .llrb_zig,
+    .name = .llrb,
 
     .version = "0.0.0",
 
-    .fingerprint = 0xa689128c84faf383, // Changing this has security and trust implications.
+    .fingerprint = 0xafccbee38389b494, // Changing this has security and trust implications.
 
     // Tracks the earliest Zig version that the package considers to be a
     // supported use case.
