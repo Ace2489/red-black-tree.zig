@@ -21,7 +21,7 @@ pub fn main() !void {
         try tree.insertAssumeCapacity(.{ .key = key, .value = key * 10 });
     }
 
-    var iterator = tree.rangeIterator(40, 100).?;
+    var iterator = tree.rangeIterator(40, 100);
 
     while (iterator.next()) |next| {
         std.debug.print("Next: {}\n", .{next});

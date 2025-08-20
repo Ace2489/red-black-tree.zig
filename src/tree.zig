@@ -498,8 +498,7 @@ pub fn Tree(
             return node.idx;
         }
 
-        pub fn rangeIterator(self: Self, min: K, max: K) ?Iterator {
-            if (self.root_idx == NULL_IDX) return null;
+        pub fn rangeIterator(self: Self, min: K, max: K) Iterator {
             assert(self.nodes.items.len <= MAX_IDX);
             assert(cmp_fn(min, max) != .gt);
 
