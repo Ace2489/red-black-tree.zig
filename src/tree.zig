@@ -19,6 +19,7 @@ pub const Node = struct {
     parent_idx: u32,
 };
 
+//todo: restructure the methods to have the primary methods at the top and the internal methods beneath
 pub fn Tree(
     comptime K: type,
     comptime V: type,
@@ -35,6 +36,84 @@ pub fn Tree(
         pub const Values = std.ArrayListUnmanaged(V);
         pub const Nodes = std.ArrayListUnmanaged(Node);
         pub const Colours = std.DynamicBitSetUnmanaged;
+        pub const Iterator = struct {
+            const State = @This();
+            pub const Stack = std.SinglyLinkedList(Node);
+            pub const NodeBuffer = [64]Stack.Node;
+
+            start_idx: u32,
+            stack: Stack,
+            min: Key,
+            max: Key,
+            keys: []Key,
+            nodes: []Node,
+
+            ///Points to the next matching node in the tree
+            next_match_idx: u32 = NULL_IDX,
+
+            /// The backing storage for the "frames" of the stack
+            ///
+            /// The maximum depth of the stack equals the height of the tree.
+            /// For a red-black tree with up to 0xFFFFFFFE nodes, the height is bounded by
+            /// 2 * log₂(0xFFFFFFFE).
+            ///
+            /// This comes out to 64 slots.
+            node_buffer: NodeBuffer = undefined,
+
+            ///The next index in the buffer to write at
+            write_idx: u6 = 0,
+
+            ///Returns the next matching item in the tree and advances the iterator
+            pub fn next(self: *State) ?K {
+                const next_match_idx = if (self.next_match_idx != NULL_IDX) self.next_match_idx else return null;
+                const matched_key = self.keys[next_match_idx];
+                self.advance();
+                return matched_key;
+            }
+
+            ///Advances the state of the tree and updates internal fields for next and peek
+            ///
+            ///You shouldn't need to call this yourself unless you're hacking the internals
+            pub fn advance(self: *State) void {
+                while (true) {
+                    if (self.start_idx != NULL_IDX) {
+                        const node = self.nodes[self.start_idx];
+                        const min_comp = cmp_fn(self.min, self.keys[node.idx]);
+                        const max_comp = cmp_fn(self.max, self.keys[node.idx]);
+                        if (min_comp != .gt and max_comp != .lt) {
+                            self.node_buffer[self.write_idx] = Stack.Node{ .data = node };
+                            self.stack.prepend(&self.node_buffer[self.write_idx]);
+                            self.write_idx += 1;
+                            self.start_idx = node.left_idx;
+                            continue;
+                        }
+                        if (min_comp == .gt) {
+                            assert(max_comp != .lt); //We cannot be less than the min and greater than the max at the same time
+                            self.start_idx = node.right_idx;
+                            continue;
+                        }
+                        assert(max_comp == .lt);
+                        self.start_idx = node.left_idx;
+                        continue;
+                    }
+                    if (self.stack.popFirst()) |popped_node| {
+                        self.start_idx = popped_node.data.right_idx;
+                        self.next_match_idx = popped_node.data.idx;
+                        return;
+                    }
+                    self.next_match_idx = NULL_IDX;
+                    return;
+                }
+            }
+
+            ///Returns the next matching item in the tree but does not advance the iterator
+            ///
+            ///i.e this call is idempotent
+            pub fn peek(self: *State) ?K {
+                if (self.next_match_idx == NULL_IDX) return null;
+                return self.keys[self.next_match_idx];
+            }
+        };
 
         pub const cmp_fn = compare_fn;
         const Self = @This();
@@ -109,9 +188,9 @@ pub fn Tree(
         }
 
         pub fn insertNode(self: *Self, node: *Node, kv: KV) u32 {
-            assert(self.keys.items.len <= self.keys.capacity - 1);
-            assert(self.nodes.items.len <= self.nodes.capacity - 1);
-            assert(self.values.items.len <= self.values.capacity - 1);
+            assert(self.keys.items.len < self.keys.capacity);
+            assert(self.nodes.items.len < self.nodes.capacity);
+            assert(self.values.items.len < self.values.capacity);
             assert(self.colours.capacity() > self.nodes.items.len);
             assert(self.nodes.items.len == self.keys.items.len and self.nodes.items.len == self.values.items.len);
 
@@ -310,7 +389,7 @@ pub fn Tree(
 
         pub fn range(self: *Self, min: K, max: K, out_buffer: []K) u32 {
             if (self.root_idx == NULL_IDX) return 0;
-            assert(self.nodes.items.len < MAX_IDX);
+            assert(self.nodes.items.len <= MAX_IDX);
 
             const root = &self.nodes.items[self.root_idx];
             const count = rangeNodes(self.nodes.items, self.keys.items, root, min, max, out_buffer, 0);
@@ -358,6 +437,25 @@ pub fn Tree(
 
             self.values.items[val_idx] = kv.value;
             return .{ .key = kv.key, .value = kv.value };
+        }
+
+        pub fn rangeIterator(self: Self, min: K, max: K) ?Iterator {
+            if (self.root_idx == NULL_IDX) return null;
+            assert(self.nodes.items.len <= MAX_IDX);
+            assert(cmp_fn(min, max) != .gt);
+
+            var iterator: Iterator = .{
+                .stack = .{},
+                .start_idx = self.root_idx,
+                .min = min,
+                .max = max,
+                .keys = self.keys.items,
+                .nodes = self.nodes.items,
+            };
+
+            //Advance the iterator once to set the stage for next and peek
+            iterator.advance();
+            return iterator;
         }
 
         ///This method assumes there is a node to delete
@@ -1367,9 +1465,7 @@ test "removeSuccessorNode" {
         var index_ptr: u32 = NULL_IDX;
 
         const new_root_idx = T.removeSuccessorNode(tree.nodes.items, &tree.colours, tree.root_idx, &index_ptr);
-        // for (tree.nodes.items) |node| {
-        //     std.debug.print("\nNode:{}\nKey:{}. isRed:{}\n", .{ node, tree.keys.items[node.idx], T.isRed(&tree.colours, node.idx) });
-        // }
+
         try expect(index_ptr == 0);
         try expect(tree.keys.items[new_root_idx] == 25);
         try expect(isRed(&tree.colours, new_root_idx) == true);
