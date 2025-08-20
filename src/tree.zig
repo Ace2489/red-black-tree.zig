@@ -108,7 +108,7 @@ pub fn Tree(
             ///Returns the next matching item in the tree but does not advance the iterator
             ///
             ///i.e this call is idempotent
-            pub fn peek(self: *State) ?K {
+            pub fn peek(self: State) ?K {
                 if (self.next_match_idx == NULL_IDX) return null;
                 return self.keys[self.next_match_idx];
             }
