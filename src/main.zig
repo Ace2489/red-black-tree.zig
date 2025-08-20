@@ -88,39 +88,6 @@ pub fn verifyRBTreeInvariants(tree: T, node: *RBTree.Node, start_count: u6) u6 {
     return returned_left_count;
 }
 
-pub fn filter(tree: T, allocator: std.mem.Allocator, min: T.Key, max: T.Key) void {
-    if (tree.root_idx == NULL_IDX) return;
-    assert(comp(min, max) != .gt);
-    const keys = tree.keys.items;
-    var start_idx = tree.root_idx;
-    var stack = Stack{};
-    while (true) {
-        if (start_idx != NULL_IDX) {
-            const node = tree.nodes.items[start_idx];
-            const min_comp = comp(min, keys[node.idx]);
-            const max_comp = comp(max, keys[node.idx]);
-            if (min_comp != .gt and max_comp != .lt) {
-                const new_node = allocator.create(Stack.Node) catch unreachable;
-                new_node.*.data = node;
-                stack.prepend(new_node);
-                start_idx = node.left_idx;
-                continue;
-            }
-            if (min_comp == .gt) {
-                assert(max_comp != .lt); //We cannot be less than the min and greater than the max at the same time
-                start_idx = node.right_idx;
-                continue;
-            }
-            assert(max_comp == .lt);
-            start_idx = node.left_idx;
-            continue;
-        }
-
-        const popped_node = stack.popFirst() orelse break;
-        std.debug.print("{}, ", .{tree.keys.items[popped_node.data.idx]});
-        start_idx = popped_node.data.right_idx;
-    }
-}
 fn comp(a: u64, b: u64) std.math.Order {
     return std.math.order(a, b);
 }
