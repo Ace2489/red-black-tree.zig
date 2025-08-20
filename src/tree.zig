@@ -19,7 +19,6 @@ pub const Node = struct {
     parent_idx: u32,
 };
 
-//todo: restructure the methods to have the primary methods at the top and the internal methods beneath
 pub fn Tree(
     comptime K: type,
     comptime V: type,
@@ -387,77 +386,6 @@ pub fn Tree(
             return .{ .key = removed_key, .value = removed_value };
         }
 
-        pub fn range(self: *Self, min: K, max: K, out_buffer: []K) u32 {
-            if (self.root_idx == NULL_IDX) return 0;
-            assert(self.nodes.items.len <= MAX_IDX);
-
-            const root = &self.nodes.items[self.root_idx];
-            const count = rangeNodes(self.nodes.items, self.keys.items, root, min, max, out_buffer, 0);
-            assert(count <= out_buffer.len);
-            return count;
-        }
-
-        pub fn rangeNodes(nodes: []Node, keys: []const Key, start_node: *Node, min: K, max: K, out_buffer: []K, collected_elements: u32) u32 {
-            if (collected_elements == out_buffer.len) return collected_elements;
-            assert(collected_elements < out_buffer.len);
-
-            var idx = collected_elements;
-            const min_comparison = cmp_fn(min, keys[start_node.idx]);
-
-            if (min_comparison == .lt) { // min < current_key
-                const left_idx = start_node.left_idx;
-                if (left_idx != NULL_IDX) {
-                    const left = &nodes[start_node.left_idx];
-                    idx = rangeNodes(nodes, keys, left, min, max, out_buffer, idx);
-                    if (idx == out_buffer.len) return idx;
-                }
-            }
-
-            const max_comparison = cmp_fn(max, keys[start_node.idx]);
-
-            if (min_comparison != .gt and max_comparison != .lt) { // min <= current_key and max >= current_key
-                out_buffer[idx] = keys[start_node.idx];
-                idx += 1;
-                if (idx == out_buffer.len) return idx; // Check after adding current node
-            }
-
-            if (max_comparison == .gt) { //max > current_key
-                const right_idx = start_node.right_idx;
-                if (right_idx != NULL_IDX) {
-                    const right = &nodes[right_idx];
-                    idx = rangeNodes(nodes, keys, right, min, max, out_buffer, idx);
-                }
-            }
-
-            return idx;
-        }
-
-        pub fn update(self: *Self, kv: KV) error{EntryNotFound}!KV {
-            const val_idx = self.getIdx(kv.key) orelse return error.EntryNotFound;
-
-            self.values.items[val_idx] = kv.value;
-            return .{ .key = kv.key, .value = kv.value };
-        }
-
-        pub fn rangeIterator(self: Self, min: K, max: K) ?Iterator {
-            if (self.root_idx == NULL_IDX) return null;
-            assert(self.nodes.items.len <= MAX_IDX);
-            assert(cmp_fn(min, max) != .gt);
-
-            var iterator: Iterator = .{
-                .stack = .{},
-                .start_idx = self.root_idx,
-                .min = min,
-                .max = max,
-                .keys = self.keys.items,
-                .nodes = self.nodes.items,
-            };
-
-            //Advance the iterator once to set the stage for next and peek
-            iterator.advance();
-            return iterator;
-        }
-
         ///This method assumes there is a node to delete
         ///
         ///Make sure to verify that the node exists with a search first before calling this
@@ -568,6 +496,77 @@ pub fn Tree(
             }
 
             return node.idx;
+        }
+
+        pub fn rangeIterator(self: Self, min: K, max: K) ?Iterator {
+            if (self.root_idx == NULL_IDX) return null;
+            assert(self.nodes.items.len <= MAX_IDX);
+            assert(cmp_fn(min, max) != .gt);
+
+            var iterator: Iterator = .{
+                .stack = .{},
+                .start_idx = self.root_idx,
+                .min = min,
+                .max = max,
+                .keys = self.keys.items,
+                .nodes = self.nodes.items,
+            };
+
+            //Advance the iterator once to set the stage for next and peek
+            iterator.advance();
+            return iterator;
+        }
+
+        pub fn range(self: *Self, min: K, max: K, out_buffer: []K) u32 {
+            if (self.root_idx == NULL_IDX) return 0;
+            assert(self.nodes.items.len <= MAX_IDX);
+
+            const root = &self.nodes.items[self.root_idx];
+            const count = rangeNodes(self.nodes.items, self.keys.items, root, min, max, out_buffer, 0);
+            assert(count <= out_buffer.len);
+            return count;
+        }
+
+        pub fn rangeNodes(nodes: []Node, keys: []const Key, start_node: *Node, min: K, max: K, out_buffer: []K, collected_elements: u32) u32 {
+            if (collected_elements == out_buffer.len) return collected_elements;
+            assert(collected_elements < out_buffer.len);
+
+            var idx = collected_elements;
+            const min_comparison = cmp_fn(min, keys[start_node.idx]);
+
+            if (min_comparison == .lt) { // min < current_key
+                const left_idx = start_node.left_idx;
+                if (left_idx != NULL_IDX) {
+                    const left = &nodes[start_node.left_idx];
+                    idx = rangeNodes(nodes, keys, left, min, max, out_buffer, idx);
+                    if (idx == out_buffer.len) return idx;
+                }
+            }
+
+            const max_comparison = cmp_fn(max, keys[start_node.idx]);
+
+            if (min_comparison != .gt and max_comparison != .lt) { // min <= current_key and max >= current_key
+                out_buffer[idx] = keys[start_node.idx];
+                idx += 1;
+                if (idx == out_buffer.len) return idx; // Check after adding current node
+            }
+
+            if (max_comparison == .gt) { //max > current_key
+                const right_idx = start_node.right_idx;
+                if (right_idx != NULL_IDX) {
+                    const right = &nodes[right_idx];
+                    idx = rangeNodes(nodes, keys, right, min, max, out_buffer, idx);
+                }
+            }
+
+            return idx;
+        }
+
+        pub fn update(self: *Self, kv: KV) error{EntryNotFound}!KV {
+            const val_idx = self.getIdx(kv.key) orelse return error.EntryNotFound;
+
+            self.values.items[val_idx] = kv.value;
+            return .{ .key = kv.key, .value = kv.value };
         }
 
         pub inline fn moveLeftRed(nodes: []Node, colours: *Colours, node_idx: u32) u32 {
@@ -1545,4 +1544,18 @@ test "replaceWithSuccessor" {
     try expect(left.parent_idx == replaced_node.idx);
     //I know that it's the right_idx
     try expect(parent.right_idx == replaced_node.idx);
+}
+
+test "update" {
+    const allocator = std.testing.allocator;
+    var tree = try T.initCapacity(allocator, 12);
+    defer tree.deinit(allocator);
+
+    // All conditions
+    for (0..5) |i| {
+        tree.insertAssumeCapacity(.{ .key = i * 5, .value = i }) catch unreachable;
+    }
+
+    _ = try tree.update(.{ .key = 1 * 5, .value = 500 });
+    try expect(tree.get(1 * 5).? == 500);
 }
