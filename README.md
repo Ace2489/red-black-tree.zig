@@ -115,9 +115,26 @@ var out_buffer: [20]Key = undefined;
 //Gets all the keys that fall between min and max
 const count = tree.range(1, 100, &out_buffer);
 ```
-### Updates
-//Under construction
+### Update
+Update replaces the value of an existing key.
+If the key is not found, it returns an `EntryNotFound` error.
 
+```zig
+const kv = .{ .key = 10, .value = "TEN" };
+const updated = try tree.update(kv);
+
+std.debug.print("Updated key {d} -> {s}\n", .{ updated.key, updated.value });
+```
+
+### Range Iterator
+You can efficiently iterate through keys between two bounds `[min, max]`.
+
+```zig
+var it = tree.rangeIterator(5, 15); 
+  while (it.next()) |key| {
+  std.debug.print("Key in range: {d}\n", .{key});
+  }
+```
 ## Architecture and Design
 ### Nodes, Arraylists, and Indexes
 Every node is a 16-byte struct, this is the same regardless of the key and value types.
