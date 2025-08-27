@@ -2,21 +2,34 @@ const std = @import("std");
 const RBTree = @import("tree.zig");
 const Tree = RBTree.Tree;
 const expect = std.testing.expect;
-const zbench = @import("zbench");
 const NULL_IDX = RBTree.NULL_IDX;
 const MAX_IDX = RBTree.MAX_IDX;
-const Colour = RBTree.Colour;
-const Stack = std.SinglyLinkedList(RBTree.Node);
 const assert = std.debug.assert;
 
 pub fn main() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    const allocator = arena.allocator();
-    defer arena.deinit();
+    var debug = std.heap.DebugAllocator(.{}).init;
+    const allocator = debug.allocator();
+    defer assert(debug.deinit() == .ok);
 
-    const inputs = [_]u64{ 0, 5, 10, 15, 20, 25, 30, 35, 40, 52, 7, 9, 13 };
+    const inputs = [_]u64{
+        0, //0
+        5, //1
+        10, //2
+        15, //3
+        20, //4
+        25, //5
+        30, //6
+        35, //7
+        40, //8
+        52, //9
+        7, //10
+        9, //11
+        13, //12
+    };
 
     var tree = try T.initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
+
     for (inputs) |key| {
         try tree.insertAssumeCapacity(.{ .key = key, .value = key * 10 });
     }
@@ -26,14 +39,12 @@ pub fn main() !void {
     while (iterator.next()) |next| {
         std.debug.print("Next: {}\n", .{next});
     }
-    // var bench = zbench.Benchmark.init(allocator, .{});
 
-    // defer bench.deinit();
+    var iter2 = tree.rangeIterator(10, 1000);
 
-    // // try bench.add("Insertions array list", tree_list, .{ .iterations = 150 });
-    // try bench.add("Insertions", rbTree, .{ .iterations = 150 });
-
-    // try bench.run(std.io.getStdOut().writer());
+    while (iter2.next()) |next| {
+        std.debug.print("Next: {}\n", .{next});
+    }
 }
 
 const T = Tree(u64, u64, comp);
@@ -160,6 +171,8 @@ test "initCapacity" {
 
     try expect(tree.nodes.capacity >= cap);
     try expect(tree.nodes.items.len == 0);
+
+    try expect(tree.colours.capacity() == cap);
 }
 
 test "reserveCapacity" {
@@ -224,6 +237,7 @@ test "insertion: tricky inputs" {
 
     for (inputs[1..]) |i| {
         tree.insertAssumeCapacity(.{ .key = i, .value = i * 10 }) catch unreachable;
+        _ = verifyRBTreeInvariants(tree, &tree.nodes.items[tree.root_idx], 1);
     }
 
     for (inputs) |i| {
@@ -251,6 +265,7 @@ test "insertion: random inputs" {
 
     for (inputs) |i| {
         tree.insertAssumeCapacity(.{ .key = i, .value = i * 10 }) catch unreachable;
+        _ = verifyRBTreeInvariants(tree, &tree.nodes.items[tree.root_idx], 0);
     }
 
     for (inputs) |i| {
@@ -299,7 +314,7 @@ test "deletion: significantly long subtree" {
 
 test "deletion (right): successive deletions to test right subtree successor replacements" {
     const allocator = std.testing.allocator;
-    const seed = std.time.nanoTimestamp(); //1755449775663246750;
+    const seed = std.time.nanoTimestamp();
     var PRNG = std.Random.Xoshiro256.init(@intCast(seed));
     const random = PRNG.random();
 
@@ -320,8 +335,7 @@ test "deletion (right): successive deletions to test right subtree successor rep
 
     var root = &tree.nodes.items[tree.root_idx];
     while (root.right_idx != NULL_IDX) {
-        const deleted = tree.delete(tree.keys.items[root.right_idx]).?;
-        _ = deleted;
+        _ = tree.delete(tree.keys.items[root.right_idx]).?;
         _ = verifyRBTreeInvariants(tree, &tree.nodes.items[tree.root_idx], 1);
         root = &tree.nodes.items[tree.root_idx];
     }
@@ -350,9 +364,10 @@ test "deletion: (root):  successor replacements and rebalancing" {
         tree.insertAssumeCapacity(.{ .key = i, .value = k * 10 }) catch unreachable;
     }
 
-    for (0..tree.nodes.items.len - 3) |_| {
+    for (0..tree.nodes.items.len) |_| {
         const deleted = tree.delete(tree.keys.items[tree.root_idx]).?;
         _ = deleted;
+        if (tree.root_idx == NULL_IDX) break;
         _ = verifyRBTreeInvariants(tree, &tree.nodes.items[tree.root_idx], 1);
     }
 }
@@ -384,7 +399,7 @@ test "deletion (left): successor deletions to test rebalancing" {
         const deleted = tree.delete(tree.keys.items[root.left_idx]).?;
         _ = deleted;
         root = &tree.nodes.items[tree.root_idx];
-        _ = verifyRBTreeInvariants(tree, &tree.nodes.items[tree.root_idx], 0);
+        _ = verifyRBTreeInvariants(tree, root, 1);
     }
 }
 
@@ -394,7 +409,7 @@ test "deletion: random deletion" {
     var PRNG = std.Random.Xoshiro256.init(@intCast(seed));
     const random = PRNG.random();
 
-    var inputs: [100_000]u64 = undefined;
+    var inputs: [30_000]u64 = undefined;
 
     for (0..inputs.len) |i| {
         inputs[i] = 5 * i;

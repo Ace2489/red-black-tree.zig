@@ -37,10 +37,18 @@ pub fn Tree(
         pub const Colours = std.DynamicBitSetUnmanaged;
         pub const Iterator = struct {
             const State = @This();
-            pub const Stack = std.SinglyLinkedList(Node);
-            pub const NodeBuffer = [64]Stack.Node;
+            pub const StackFrame = u32;
+            pub const Stack = [64]StackFrame;
 
             start_idx: u32,
+
+            /// The backing storage for the "frames" of the stack
+            ///
+            /// The maximum depth of the stack equals the height of the tree.
+            /// For a red-black tree with up to 0xFFFFFFFE nodes, the height is bounded by
+            /// 2 * log₂(0xFFFFFFFE).
+            ///
+            /// This comes out to 64 slots.
             stack: Stack,
             min: Key,
             max: Key,
@@ -50,18 +58,27 @@ pub fn Tree(
             ///Points to the next matching node in the tree
             next_match_idx: u32 = NULL_IDX,
 
-            /// The backing storage for the "frames" of the stack
-            ///
-            /// The maximum depth of the stack equals the height of the tree.
-            /// For a red-black tree with up to 0xFFFFFFFE nodes, the height is bounded by
-            /// 2 * log₂(0xFFFFFFFE).
-            ///
-            /// This comes out to 64 slots.
-            node_buffer: NodeBuffer = undefined,
-
             ///The next index in the buffer to write at
-            write_idx: u6 = 0,
+            next_write_idx: u6 = 0,
 
+            pub fn init(start_idx: u32, min: Key, max: Key, keys: []Key, nodes: []Node) Iterator {
+                var iterator: Iterator = .{
+                    .stack = undefined,
+                    .start_idx = start_idx,
+                    .min = min,
+                    .max = max,
+                    .keys = keys,
+                    .nodes = nodes,
+                };
+
+                //Trigger a segfault if it's used prematurely
+                @memset(&iterator.stack, NULL_IDX);
+
+                //Advance the iterator once to set the stage for next and peek
+                iterator.advance();
+
+                return iterator;
+            }
             ///Returns the next matching item in the tree and advances the iterator
             pub fn next(self: *State) ?K {
                 const next_match_idx = if (self.next_match_idx != NULL_IDX) self.next_match_idx else return null;
@@ -76,13 +93,12 @@ pub fn Tree(
             pub fn advance(self: *State) void {
                 while (true) {
                     if (self.start_idx != NULL_IDX) {
-                        const node = self.nodes[self.start_idx];
+                        const node = &self.nodes[self.start_idx];
                         const min_comp = cmp_fn(self.min, self.keys[node.idx]);
                         const max_comp = cmp_fn(self.max, self.keys[node.idx]);
+
                         if (min_comp != .gt and max_comp != .lt) {
-                            self.node_buffer[self.write_idx] = Stack.Node{ .data = node };
-                            self.stack.prepend(&self.node_buffer[self.write_idx]);
-                            self.write_idx += 1;
+                            self.pushFrame(node);
                             self.start_idx = node.left_idx;
                             continue;
                         }
@@ -95,11 +111,14 @@ pub fn Tree(
                         self.start_idx = node.left_idx;
                         continue;
                     }
-                    if (self.stack.popFirst()) |popped_node| {
-                        self.start_idx = popped_node.data.right_idx;
-                        self.next_match_idx = popped_node.data.idx;
+
+                    if (self.popFrame()) |frame| {
+                        const node = self.nodes[frame];
+                        self.start_idx = node.right_idx;
+                        self.next_match_idx = node.idx;
                         return;
                     }
+
                     self.next_match_idx = NULL_IDX;
                     return;
                 }
@@ -111,6 +130,20 @@ pub fn Tree(
             pub fn peek(self: State) ?K {
                 if (self.next_match_idx == NULL_IDX) return null;
                 return self.keys[self.next_match_idx];
+            }
+
+            fn pushFrame(self: *State, node_ptr: *Node) void {
+                assert(self.next_write_idx < self.stack.len);
+                self.stack[self.next_write_idx] = node_ptr.idx;
+                self.next_write_idx += 1;
+            }
+
+            fn popFrame(self: *State) ?StackFrame {
+                if (self.next_write_idx == 0) return null;
+                self.next_write_idx -= 1;
+                const frame = self.stack[self.next_write_idx];
+                self.stack[self.next_write_idx] = NULL_IDX;
+                return frame;
             }
         };
 
@@ -498,24 +531,19 @@ pub fn Tree(
             return node.idx;
         }
 
+        ///Returns an iterator which gets all the elements between a given range in the tree
         pub fn rangeIterator(self: Self, min: K, max: K) Iterator {
             assert(self.nodes.items.len <= MAX_IDX);
             assert(cmp_fn(min, max) != .gt);
 
-            var iterator: Iterator = .{
-                .stack = .{},
-                .start_idx = self.root_idx,
-                .min = min,
-                .max = max,
-                .keys = self.keys.items,
-                .nodes = self.nodes.items,
-            };
-
-            //Advance the iterator once to set the stage for next and peek
-            iterator.advance();
-            return iterator;
+            return Iterator.init(self.root_idx, min, max, self.keys.items, self.nodes.items);
         }
 
+        ///Returns the count of all the elements between a given range in the tree
+        ///
+        /// The elements are written to the input buffer
+        ///
+        ///Terminates when all the elements have been collected or the buffer is full
         pub fn range(self: *Self, min: K, max: K, out_buffer: []K) u32 {
             if (self.root_idx == NULL_IDX) return 0;
             assert(self.nodes.items.len <= MAX_IDX);
@@ -1557,4 +1585,49 @@ test "update" {
 
     _ = try tree.update(.{ .key = 1 * 5, .value = 500 });
     try expect(tree.get(1 * 5).? == 500);
+}
+
+test "range" {
+    const allocator = std.testing.allocator;
+    const seed = std.time.nanoTimestamp();
+    var PRNG = std.Random.Xoshiro256.init(@intCast(seed));
+    const random = PRNG.random();
+
+    const len: usize = 1000;
+    var inputs: [len]u64 = undefined;
+
+    for (0..inputs.len) |i| {
+        inputs[i] = 5 * i;
+    }
+
+    random.shuffle(u64, &inputs);
+    std.debug.print("\nSeed for range: {any}\n", .{seed});
+
+    var tree = try T.initCapacity(allocator, inputs.len);
+    defer tree.deinit(allocator);
+
+    for (inputs) |i| {
+        tree.insertAssumeCapacity(.{ .key = i, .value = i * 10 }) catch unreachable;
+    }
+    const last_index = inputs.len - 1;
+
+    //iterator range for the full range of elements
+    const last_element = last_index * 5;
+    var iterator = tree.rangeIterator(0, last_element);
+
+    var i: usize = 0;
+    while (iterator.next()) |item| : (i += 1) {
+        try expect(item == i * 5);
+    }
+
+    //non-iterator range
+    var output: [len]u64 = undefined;
+    const count = tree.range(0, last_element, &output);
+
+    //Make sure it found all the elements
+    try expect(count == inputs.len);
+
+    for (output, 0..) |element, j| {
+        try expect(element == j * 5);
+    }
 }

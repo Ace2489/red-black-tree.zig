@@ -7,14 +7,9 @@
 
     // Tracks the earliest Zig version that the package considers to be a
     // supported use case.
-    .minimum_zig_version = "0.14.0",
+    .minimum_zig_version = "0.15.1",
 
-    .dependencies = .{
-        .zbench = .{
-            .url = "git+https://github.com/hendriknielaender/zBench.git#c64bb43a3e32c5c62c02058ad7247e072301708d",
-            .hash = "zbench-0.10.0-YTdc714iAQDO4lTHMnIljYHPZ5v_sNTsw75vAmO1pyT-",
-        },
-    },
+    .dependencies = .{},
     .paths = .{
         "build.zig",
         "build.zig.zon",
