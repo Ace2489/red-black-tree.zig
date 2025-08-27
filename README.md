@@ -1,21 +1,21 @@
 # red-black-tree.zig
 An implementation of **left‑leaning red–black (LLRB)** trees in Zig.
 
-# Table of Contents
 ## Table of Contents
-- [Overview](#overview)
+- [Overview](#Overview)
+- [Integration into other projects](#integration-into-other-projects)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Architecture](#architecture-and-design)
 - [Correctness & Safety](#correctness-and-safety)
 - [Property-Based Testing](#property-based-testing)
 
-## Why this matters
+## Overview
 
 Self‑balancing binary search trees keep operations near **O(log n)** by performing small, local transformations (rotations and color flips) as you insert and delete keys. That predictable height makes them great building blocks for ordered maps/sets, schedulers, indexes, and any workload that needs fast, ordered data.
 
 > Note: Most database storage engines use **B/B+‑trees** (another kind of self-balancing tree) for their storage engines
-## What is an LLRB tree?
+### What is an LLRB tree?
 
 An LLRB is a variant of a red–black tree that enforces two extra constraints:
 
@@ -32,7 +32,7 @@ These rules, plus standard red–black invariants, simplify code and proofs whil
 * **BST ordering**: `left < node < right` under the chosen comparator.
 * **Left‑leaning**: no right‑red edge after fix‑ups.
 
-## Operations & complexity
+### Operations & complexity
 
 * **Search / contains**: `O(log n)` average/worst.
 * **Insert**: `O(log n)` with at most a constant number of rotations per level.
@@ -41,30 +41,31 @@ These rules, plus standard red–black invariants, simplify code and proofs whil
 
 *I recommend this [playlist](https://www.youtube.com/playlist?list=PLnp31xXvnfRrYOYhFXExoXfP8uhHHCIri) by UC Berkeley to fully understand the theory behind this data structure. It's very understandable :)*
 
+## Integration into Other Projects
 To see an example of an integration into a bigger project, I used this tree as the backing storage for an in-memory database [here](https://github.com/Ace2489/zig-comptime-db).
 
 ## Installation
 
-- Add the package to your dependencies:
+Add the package to your dependencies:
 ```bash
 zig fetch --save git+https://github.com/Ace2489/red-black-tree.zig
 ```
 
-* Expose the module to your application in your `build.zig` file:
+Expose the module to your application in your `build.zig` file:
 
 ```bash
 // in your build.zig
 const llrb = b.dependency("llrb");
 exe_mod.addImport("llrb", llrb.module("llrb"));
   ```
-* Import and use the LLRB tree in your Zig code:
+Import and use the LLRB tree in your Zig code:
 
 ```zig
 // In your Zig source file
 const LLRB = @import("llrb");
 
 pub fn main() void {
-   var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+   var gpa = std.heap.DebugAllocator(.{}).init;
    const allocator = gpa.allocator();
 
    const Tree = LLRB.Tree;
@@ -115,9 +116,26 @@ var out_buffer: [20]Key = undefined;
 //Gets all the keys that fall between min and max
 const count = tree.range(1, 100, &out_buffer);
 ```
-### Updates
-//Under construction
+### Update
+Update replaces the value of an existing key.
+If the key is not found, it returns an `EntryNotFound` error.
 
+```zig
+const kv = .{ .key = 10, .value = "TEN" };
+const updated = try tree.update(kv);
+
+std.debug.print("Updated key {d} -> {s}\n", .{ updated.key, updated.value });
+```
+
+### Range Iterator
+You can iterate through keys between two bounds `[min, max]`.
+
+```zig
+var it = tree.rangeIterator(5, 15); 
+while (it.next()) |key| {
+std.debug.print("Key in range: {d}\n", .{key});
+}
+```
 ## Architecture and Design
 ### Nodes, Arraylists, and Indexes
 Every node is a 16-byte struct, this is the same regardless of the key and value types.
@@ -132,9 +150,9 @@ pub const Node = struct {
 In typical implementations, the left, right, and parent_pointers would be implemented as regular pointers. Here, we use u32 indexes into a backing array. Doing this has two advantages:
 
 - Each index is half the size of a regular pointer, meaning we can fit twice as many nodes into the same space.
-- A backing array allows memory management(allocation, de-allocation, and deinitialisation) to be much more straightforward — it's essentially just working with arrays. In a more typical pointer-based scenario, deinitialisation would require traversing the entire tree, freeing each node in the process.
+- A backing array allows memory management(allocation, de-allocation, and deinitialisation) to be much more straightforward — it's essentially just working with arrays. In a more typical pointer-based scenario, deinitialisation would require traversing the entire tree and freeing each node individually.
 
-Admittedly, using a u32 value instead of the u64 pointer does limit the number of possible addressable elements to 4,294,967,295 (0xFFFFFFFF) elements (see where the number came from?), but for an in-memory database, that should be more than fine.
+Admittedly, using a u32 value instead of the u64 pointer(on most systems) does limit the number of possible addressable elements to 4,294,967,295 (0xFFFFFFFF) elements (see where the number came from?), but for an in-memory database, that should be more than fine.
 
 
 In addition, using arrays as the backing storage has the added benefit of improving cache locality and reducing thrashing. Neat!
@@ -167,6 +185,7 @@ This is the easier class of bug: violations occur when the insertion logic is fl
 
 * Perform bulk insertions up to capacity.
 * Verify that each inserted key, when queried, yields the correct value.
+* Simple tests for insertion logic.
 
 ### 2. Tree Inconsistencies
 This is the harder problem. Even if the BST property is correct, the balancing logic can go wrong. Issues arise during:
