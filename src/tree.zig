@@ -142,6 +142,9 @@ pub fn Tree(
                 if (self.next_write_idx == 0) return null;
                 self.next_write_idx -= 1;
                 const frame = self.stack[self.next_write_idx];
+
+                assert(frame != NULL_IDX);
+
                 self.stack[self.next_write_idx] = NULL_IDX;
                 return frame;
             }

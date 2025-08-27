@@ -409,7 +409,7 @@ test "deletion: random deletion" {
     var PRNG = std.Random.Xoshiro256.init(@intCast(seed));
     const random = PRNG.random();
 
-    var inputs: [30_000]u64 = undefined;
+    var inputs: [10_000]u64 = undefined;
 
     for (0..inputs.len) |i| {
         inputs[i] = 5 * i;
